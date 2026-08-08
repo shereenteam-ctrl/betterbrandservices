@@ -1,10 +1,9 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 
-
 import '../styles.css'
 
 export const Route = createRootRoute({
-head: () => ({
+  head: () => ({
     meta: [
       {
         charSet: 'utf-8',
@@ -25,6 +24,9 @@ head: () => ({
       },
     ],
   }),
+
+  component: RootDocument,
+})
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
