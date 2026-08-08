@@ -1,5 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#08162A"/>
-  <path d="public/BBS logo 48x48.jpg"/>
-  <path d="public/BBS logo 48x48.jpg" fill="#1684FF"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <image href="/BBS%20logo%2048x48.jpg" width="48" height="48"/>
 </svg>
