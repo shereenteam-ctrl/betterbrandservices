@@ -4,7 +4,7 @@ import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import '../styles.css'
 
 export const Route = createRootRoute({
-  head: () => ({
+head: () => ({
     meta: [
       {
         charSet: 'utf-8',
@@ -17,9 +17,14 @@ export const Route = createRootRoute({
         title: 'Better Brand Services',
       },
     ],
+    links: [
+      {
+        rel: 'icon',
+        href: '/BBS%20logo%2048x48.jpg',
+        type: 'image/jpeg',
+      },
+    ],
   }),
-  shellComponent: RootDocument,
-})
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
