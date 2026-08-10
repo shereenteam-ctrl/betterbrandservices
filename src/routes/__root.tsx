@@ -28,7 +28,7 @@ export const Route = createRootRoute({
   component: RootDocument,
 })
 
-function RootDocument({ children }: { children: React.ReactNode }) {
+function RootDocument({ children }: { children?: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
