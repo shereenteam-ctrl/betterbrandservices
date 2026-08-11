@@ -1,4 +1,4 @@
-import { c as createRouter, a as createRootRoute, b as createFileRoute, l as lazyRouteComponent, H as HeadContent, S as Scripts } from "../_libs/tanstack__react-router.mjs";
+import { c as createRouter, a as createRootRoute, b as createFileRoute, l as lazyRouteComponent, H as HeadContent, O as Outlet, S as Scripts } from "../_libs/tanstack__react-router.mjs";
 import { j as jsxRuntimeExports } from "../_libs/react.mjs";
 import "../_libs/tanstack__router-core.mjs";
 import "../_libs/tanstack__history.mjs";
@@ -37,29 +37,17 @@ const Route$2 = createRootRoute({
   }),
   component: RootDocument
 });
-function RootDocument({ children }) {
+function RootDocument() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("html", { lang: "en", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("head", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(HeadContent, {}) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("body", { children: [
-      children,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Outlet, {}),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Scripts, {})
     ] })
   ] });
 }
-const $$splitComponentImporter$1 = () => import("./builder-DU-WwMi1.mjs");
-const Route$1 = createFileRoute("/builder")({
-  head: () => ({
-    meta: [{
-      title: "BBS AI Builder | Better Brand Services"
-    }, {
-      name: "description",
-      content: "Build, manage, and prepare websites for deployment in the BBS AI Builder workspace."
-    }]
-  }),
-  component: lazyRouteComponent($$splitComponentImporter$1, "component")
-});
-const $$splitComponentImporter = () => import("./index-DlViSvw4.mjs");
-const Route = createFileRoute("/")({
+const $$splitComponentImporter$1 = () => import("./index-DlViSvw4.mjs");
+const Route$1 = createFileRoute()({
   head: () => ({
     meta: [{
       title: "Better Brand Services | Branding, Websites, Logos & Creative Solutions"
@@ -94,16 +82,28 @@ const Route = createFileRoute("/")({
       type: "image/svg+xml"
     }]
   }),
+  component: lazyRouteComponent($$splitComponentImporter$1, "component")
+});
+const $$splitComponentImporter = () => import("./builder-BYM2mJm0.mjs");
+const Route = createFileRoute()({
+  head: () => ({
+    meta: [{
+      title: "BBS AI Builder | Better Brand Services"
+    }, {
+      name: "description",
+      content: "Build, manage, and prepare websites for deployment in the BBS AI Builder workspace."
+    }]
+  }),
   component: lazyRouteComponent($$splitComponentImporter, "component")
 });
-const BuilderRoute = Route$1.update({
-  id: "/builder",
-  path: "/builder",
-  getParentRoute: () => Route$2
-});
-const IndexRoute = Route.update({
+const IndexRoute = Route$1.update({
   id: "/",
   path: "/",
+  getParentRoute: () => Route$2
+});
+const BuilderRoute = Route.update({
+  id: "/builder",
+  path: "/builder",
   getParentRoute: () => Route$2
 });
 const rootRouteChildren = {

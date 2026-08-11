@@ -1,5 +1,5 @@
 import { r as reactExports, j as jsxRuntimeExports } from "../_libs/react.mjs";
-import { S as Sparkles, b as ArrowRight, X, M as Menu, v as ChevronDown, w as Star, x as BadgeCheck, y as Palette, z as Layers, W as WandSparkles, G as Images, o as CreditCard, H as FileText, V as Video, J as Play, K as Smartphone, N as Clapperboard, O as MonitorSmartphone, Q as BriefcaseBusiness, T as Building2, p as CodeXml, U as Sheet, Y as Search, _ as Clock3, u as Check, $ as Image, E as Earth, R as Rocket, a as ShieldCheck, Z as Zap, a0 as MessageCircle, a1 as Quote, a2 as Phone, a3 as Mail, q as Send, a4 as ArrowUp } from "../_libs/lucide-react.mjs";
+import { S as Sparkles, A as ArrowRight, X, M as Menu, C as ChevronDown, a as Star, B as BadgeCheck, P as Palette, L as Layers, W as WandSparkles, I as Images, b as CreditCard, F as FileText, V as Video, c as Play, d as Smartphone, e as Clapperboard, f as MonitorSmartphone, g as BriefcaseBusiness, h as Building2, i as CodeXml, j as Sheet, k as Search, l as Clock3, m as Check, n as Image, E as Earth, R as Rocket, o as ShieldCheck, Z as Zap, p as MessageCircle, Q as Quote, q as Phone, r as Mail, s as Send, t as ArrowUp } from "../_libs/lucide-react.mjs";
 const services = [{
   icon: Palette,
   title: "Logo Design",
