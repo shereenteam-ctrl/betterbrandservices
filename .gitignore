@@ -4,3 +4,7 @@ dist/
 .netlify/
 *.swp
 dev-error.txt
+.vercel
+.env*
+
+.output/

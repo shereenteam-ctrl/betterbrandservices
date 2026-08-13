@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BuilderRouteImport } from './routes/builder'
+import { Route as ApiBuilderAuthRouteImport } from './routes/api/builder-auth'
+import { Route as ApiBuilderWorkspaceRouteImport } from './routes/api/builder-workspace'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +24,54 @@ const BuilderRoute = BuilderRouteImport.update({
   path: '/builder',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBuilderAuthRoute = ApiBuilderAuthRouteImport.update({
+  id: '/api/builder-auth',
+  path: '/api/builder-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBuilderWorkspaceRoute = ApiBuilderWorkspaceRouteImport.update({
+  id: '/api/builder-workspace',
+  path: '/api/builder-workspace',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/builder'
+  fullPaths: '/' | '/builder' | '/api/builder-auth' | '/api/builder-workspace'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/builder'
-  id: '__root__' | '/' | '/builder'
+  to: '/' | '/builder' | '/api/builder-auth' | '/api/builder-workspace'
+  id:
+    | '__root__'
+    | '/'
+    | '/builder'
+    | '/api/builder-auth'
+    | '/api/builder-workspace'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BuilderRoute: typeof BuilderRoute
+  ApiBuilderAuthRoute: typeof ApiBuilderAuthRoute
+  ApiBuilderWorkspaceRoute: typeof ApiBuilderWorkspaceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +90,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BuilderRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/builder-auth': {
+      id: '/api/builder-auth'
+      path: '/api/builder-auth'
+      fullPath: '/api/builder-auth'
+      preLoaderRoute: typeof ApiBuilderAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/builder-workspace': {
+      id: '/api/builder-workspace'
+      path: '/api/builder-workspace'
+      fullPath: '/api/builder-workspace'
+      preLoaderRoute: typeof ApiBuilderWorkspaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BuilderRoute: BuilderRoute,
+  ApiBuilderAuthRoute: ApiBuilderAuthRoute,
+  ApiBuilderWorkspaceRoute: ApiBuilderWorkspaceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

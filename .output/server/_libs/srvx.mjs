@@ -1,4 +1,4 @@
-import nodeHTTP from "node:http";
+import http from "node:http";
 import { Readable, PassThrough } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import nodeHTTPS from "node:https";
@@ -898,7 +898,7 @@ var NodeServer = class {
     }, handler);
     else throw new Error("node.http2 option requires tls certificate!");
     else if (this.#isSecure) server = nodeHTTPS.createServer(this.serveOptions, handler);
-    else server = nodeHTTP.createServer(this.serveOptions, handler);
+    else server = http.createServer(this.serveOptions, handler);
     this.node.server = server;
     if (!options.manual) this.serve().catch(() => {
     });
