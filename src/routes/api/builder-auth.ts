@@ -179,7 +179,7 @@ const verifyCode = async (email: string, code: string) => {
     SELECT id, email
     FROM bbs_users
     WHERE email = ${email}
-  `
+  ` as unknown[] as (BbsUser | undefined)[]
 
   const user: BbsUser = existingUser ?? {
     id: randomBytes(16).toString('hex'),
@@ -214,6 +214,7 @@ const verifyCode = async (email: string, code: string) => {
           'Path=/',
           'HttpOnly',
           'SameSite=Lax',
+          'Secure',
           'Max-Age=2592000',
         ].join('; '),
       },

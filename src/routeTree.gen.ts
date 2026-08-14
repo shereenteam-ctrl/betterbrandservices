@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BuilderRouteImport } from './routes/builder'
 import { Route as ApiBuilderAuthRouteImport } from './routes/api/builder-auth'
-import { Route as ApiBuilderWorkspaceRouteImport } from './routes/api/builder-workspace'
+import { Route as ApiBuilderWorkspaceRouteImport } from './routes/api/builder-workspace-old.ts'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
