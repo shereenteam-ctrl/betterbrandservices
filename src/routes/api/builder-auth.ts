@@ -22,12 +22,35 @@ const validEmail = (value: string) =>
 const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex')
 
-const sql = neon(process.env.DATABASE_URL!)
+/**
+ * Lazily create the Neon client. Instantiating at module scope would throw
+ * during import when DATABASE_URL is not yet configured, which would take
+ * down every route in the app (the route tree imports this file). Keeping it
+ * lazy means only the auth endpoint fails, with a clear message.
+ */
+let _sql: ReturnType<typeof neon> | null = null
+const sql = () => {
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl) {
+    throw new Error(
+      'DATABASE_URL is missing. Connect a database to enable the BBS AI Builder.',
+    )
+  }
+  if (!_sql) {
+    _sql = neon(databaseUrl)
+  }
+  return _sql
+}
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const getResend = () => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is missing.')
+  }
+  return new Resend(process.env.RESEND_API_KEY)
+}
 
 const ensureTables = async () => {
-  await sql`
+  await sql()`
     CREATE TABLE IF NOT EXISTS bbs_auth_codes (
       email TEXT PRIMARY KEY,
       code_hash TEXT NOT NULL,
@@ -37,7 +60,7 @@ const ensureTables = async () => {
     )
   `
 
-  await sql`
+  await sql()`
     CREATE TABLE IF NOT EXISTS bbs_users (
       id TEXT PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
@@ -45,7 +68,7 @@ const ensureTables = async () => {
     )
   `
 
-  await sql`
+  await sql()`
     CREATE TABLE IF NOT EXISTS bbs_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -59,7 +82,7 @@ const sendCodeEmail = async (email: string, code: string) => {
     throw new Error('RESEND_API_KEY is missing.')
   }
 
-  const result = await resend.emails.send({
+  const result = await getResend().emails.send({
     from: 'Better Brand Services <info@betterbrandservices.com>',
     to: email,
     subject: 'Your BBS AI Builder verification code',
@@ -84,7 +107,7 @@ const sendCodeEmail = async (email: string, code: string) => {
 const requestCode = async (email: string) => {
   await ensureTables()
 
-  const [recentCode] = await sql`
+  const [recentCode] = await sql()`
     SELECT last_sent_at
     FROM bbs_auth_codes
     WHERE email = ${email}
@@ -100,7 +123,7 @@ const requestCode = async (email: string) => {
 
   const code = String(randomInt(1000, 10000))
 
-  await sql`
+  await sql()`
     INSERT INTO bbs_auth_codes
       (email, code_hash, expires_at, attempts, last_sent_at)
     VALUES
@@ -121,7 +144,7 @@ const requestCode = async (email: string) => {
   try {
     await sendCodeEmail(email, code)
   } catch (error) {
-    await sql`
+    await sql()`
       DELETE FROM bbs_auth_codes
       WHERE email = ${email}
     `
@@ -143,7 +166,7 @@ const verifyCode = async (email: string, code: string) => {
 
   await ensureTables()
 
-  const [verifiedCode] = await sql`
+  const [verifiedCode] = await sql()`
     DELETE FROM bbs_auth_codes
     WHERE email = ${email}
       AND code_hash = ${hash(`${email}:${code}`)}
@@ -153,7 +176,7 @@ const verifyCode = async (email: string, code: string) => {
   `
 
   if (!verifiedCode) {
-    const [failedCode] = await sql`
+    const [failedCode] = await sql()`
       UPDATE bbs_auth_codes
       SET attempts = attempts + 1
       WHERE email = ${email}
@@ -175,7 +198,7 @@ const verifyCode = async (email: string, code: string) => {
     )
   }
 
-  const [existingUser] = await sql`
+  const [existingUser] = await sql()`
     SELECT id, email
     FROM bbs_users
     WHERE email = ${email}
@@ -187,7 +210,7 @@ const verifyCode = async (email: string, code: string) => {
   }
 
   if (!existingUser) {
-    await sql`
+    await sql()`
       INSERT INTO bbs_users (id, email)
       VALUES (${user.id}, ${user.email})
     `
@@ -196,7 +219,7 @@ const verifyCode = async (email: string, code: string) => {
   const sessionToken = randomBytes(32).toString('base64url')
   const tokenHash = hash(sessionToken)
 
-  await sql`
+  await sql()`
     INSERT INTO bbs_sessions
       (token_hash, user_id, expires_at)
     VALUES

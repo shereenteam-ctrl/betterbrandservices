@@ -64,7 +64,7 @@ export const Route = createFileRoute('/builder')({
 type AuthState = 'checking' | 'email' | 'code' | 'authenticated'
 type PlatformTab = 'projects' | 'builder' | 'domains' | 'deployments' | 'settings'
 type BuilderStage = 'landing' | 'create' | 'workspace'
-type ProviderId = 'bbs-ai' | 'codex' | 'gemini' | 'lovable'
+type ProviderId = 'bbs-ai'
 
 type Project = {
   id: string
@@ -124,10 +124,7 @@ const navItems: Array<{ id: PlatformTab; label: string; icon: LucideIcon }> = [
 ]
 
 const providers: Array<{ id: ProviderId; name: string; description: string; badge?: string }> = [
-  { id: 'bbs-ai', name: 'BBS AI', description: 'Flagship BBS workflow for brand-led website creation.', badge: 'Default' },
-  { id: 'codex', name: 'Codex', description: 'External provider integration prepared for its supported API.' },
-  { id: 'gemini', name: 'Gemini', description: 'External provider integration prepared for its supported API.' },
-  { id: 'lovable', name: 'Lovable', description: 'External provider integration prepared for supported workflows.' },
+  { id: 'bbs-ai', name: 'BBS AI', description: 'The autonomous BBS engine that plans, builds, and revises your entire website.', badge: 'BBS Engine' },
 ]
 
 function BuilderPage() {
@@ -534,7 +531,6 @@ function BuilderView({
 function CreateWebsite({ onBack, onCreated }: { onBack: () => void; onCreated: (result: { project: Project; userMessage: BuilderMessage; generatedMessage: BuilderMessage }) => void }) {
   const [method, setMethod] = useState<'ai' | 'import'>('ai')
   const [prompt, setPrompt] = useState('')
-  const [provider, setProvider] = useState<ProviderId>('bbs-ai')
   const [status, setStatus] = useState<'idle' | 'saving'>('idle')
   const [error, setError] = useState('')
   const [importName, setImportName] = useState('')
@@ -548,7 +544,7 @@ function CreateWebsite({ onBack, onCreated }: { onBack: () => void; onCreated: (
       const response = await fetch('/api/builder-workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create-project', prompt, provider, name }),
+        body: JSON.stringify({ action: 'create-project', prompt, provider: 'bbs-ai', name }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'The project could not be created.')
@@ -572,10 +568,11 @@ function CreateWebsite({ onBack, onCreated }: { onBack: () => void; onCreated: (
             <textarea value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 4000))} placeholder="Describe your website or business idea..." aria-label="Describe your website or business idea" />
             <div className="prompt-example"><Sparkles size={16} /><span>Try:</span> “Build a modern website for my plumbing company with Home, Services, About, Reviews, and Contact pages.”</div>
             {error && <InlineNotice kind="error" message={error} />}
-            <button className="build-button" onClick={() => void buildWebsite()} disabled={status === 'saving'}>{status === 'saving' ? <><LoaderCircle className="spin" /> Generating website</> : <>Build Website <ArrowRight /></>}</button>
-            <p className="integration-honesty"><ShieldCheck size={15} /> BBS AI generates a complete responsive website and saves the code in your workspace.</p>
+            {status === 'saving' && <BuildProgress />}
+            <button className="build-button" onClick={() => void buildWebsite()} disabled={status === 'saving'}>{status === 'saving' ? <><LoaderCircle className="spin" /> BBS AI is building</> : <>Build with BBS AI <ArrowRight /></>}</button>
+            <p className="integration-honesty"><ShieldCheck size={15} /> BBS AI plans, writes, and saves a complete responsive website in your workspace.</p>
           </div>
-          <ProviderPicker selected={provider} onSelect={setProvider} />
+          <EnginePanel />
         </div>
       ) : (
         <div className="import-panel">
@@ -589,8 +586,49 @@ function CreateWebsite({ onBack, onCreated }: { onBack: () => void; onCreated: (
   )
 }
 
-function ProviderPicker({ selected, onSelect }: { selected: ProviderId; onSelect: (provider: ProviderId) => void }) {
-  return <aside className="provider-picker"><span className="section-tag">Choose Your AI Builder</span><h2>Build engine</h2><p>BBS AI is connected through Netlify AI Gateway.</p><div>{providers.map((provider) => <button key={provider.id} className={selected === provider.id ? 'selected' : ''} onClick={() => onSelect(provider.id)} disabled={provider.id !== 'bbs-ai'}><span className="provider-radio">{selected === provider.id && <Check size={13} />}</span><span><strong>{provider.name}{provider.id === 'bbs-ai' && ' ⭐'}</strong><small>{provider.id === 'bbs-ai' ? 'Generates and revises a complete responsive HTML website.' : 'Coming soon.'}</small></span>{provider.badge && <b>{provider.badge}</b>}</button>)}</div><small className="provider-disclaimer">Additional provider integrations remain unavailable until their supported workflows are connected.</small></aside>
+const buildStages = ['Understanding request', 'Planning website', 'Creating pages', 'Building components', 'Applying design', 'Connecting functionality', 'Testing project', 'Ready'] as const
+
+function BuildProgress() {
+  const [step, setStep] = useState(0)
+  useEffect(() => {
+    const timer = window.setInterval(() => setStep((current) => Math.min(current + 1, buildStages.length - 2)), 1400)
+    return () => window.clearInterval(timer)
+  }, [])
+  return (
+    <div className="build-progress" role="status" aria-live="polite">
+      <span className="section-tag"><Sparkles size={13} /> BBS AI is working</span>
+      <ul>
+        {buildStages.slice(0, buildStages.length - 1).map((stage, index) => (
+          <li key={stage} className={index < step ? 'done' : index === step ? 'active' : ''}>
+            {index < step ? <Check size={14} /> : index === step ? <LoaderCircle className="spin" size={14} /> : <span className="dot" />}
+            {stage}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function EnginePanel() {
+  const engine = providers[0]
+  return (
+    <aside className="provider-picker">
+      <span className="section-tag"><Sparkles size={13} /> Build engine</span>
+      <h2>BBS AI</h2>
+      <p>BBS AI is the only engine. It independently understands your idea, plans the build, writes the code, and keeps your project in context for every follow-up.</p>
+      <div className="engine-card selected">
+        <span className="engine-mark"><Sparkles size={16} /></span>
+        <span><strong>{engine.name}</strong><small>{engine.description}</small></span>
+        {engine.badge && <b>{engine.badge}</b>}
+      </div>
+      <ul className="engine-capabilities">
+        <li><Check size={14} /> Plans pages &amp; components</li>
+        <li><Check size={14} /> Writes responsive code</li>
+        <li><Check size={14} /> Edits your project in place</li>
+        <li><Check size={14} /> Remembers full project context</li>
+      </ul>
+    </aside>
+  )
 }
 
 function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Project; messages: BuilderMessage[]; onMessagesAdded: (messages: BuilderMessage[]) => void }) {
@@ -718,7 +756,7 @@ function SettingsView({ user }: { user: User }) {
       <PageIntro eyebrow="Workspace controls" title="Settings" description="Review account, provider, billing, and infrastructure connection states." />
       <div className="settings-grid">
         <article className="settings-card"><div className="settings-card-heading"><span><ShieldCheck /></span><div><h2>Account</h2><p>Authenticated through Netlify Identity email verification.</p></div></div><label>Email address<input value={user.email ?? ''} readOnly /></label><label>Authentication method<input value="4-digit email verification code" readOnly /></label><div className="settings-success"><CheckCircle2 size={16} /> Passwordless access active</div></article>
-        <article className="settings-card"><div className="settings-card-heading"><span><Bot /></span><div><h2>AI Providers</h2><p>BBS AI generation runs through Netlify AI Gateway.</p></div></div><div className="integration-list">{providers.map((provider) => <div key={provider.id}><span className="integration-logo">{provider.name[0]}</span><span><strong>{provider.name}</strong><small>{provider.id === 'bbs-ai' ? 'Website generation active' : 'Independent external provider'}</small></span><StatusBadge status={provider.id === 'bbs-ai' ? 'connected' : 'not_connected'} /></div>)}</div></article>
+        <article className="settings-card"><div className="settings-card-heading"><span><Bot /></span><div><h2>BBS AI Engine</h2><p>BBS AI is the single autonomous engine that builds and revises every project.</p></div></div><div className="integration-list"><div><span className="integration-logo">B</span><span><strong>BBS AI</strong><small>Autonomous website generation active</small></span><StatusBadge status="connected" /></div></div></article>
         <article className="settings-card"><div className="settings-card-heading"><span><Rocket /></span><div><h2>Deployment Provider</h2><p>Required for builds, published URLs, and redeploys.</p></div></div><div className="large-connection-state"><Cloud size={27} /><strong>Not connected</strong><p>Connect supported deployment infrastructure before enabling publish actions.</p><button disabled>Configure deployment</button></div></article>
         <article className="settings-card"><div className="settings-card-heading"><span><CircleDollarSign /></span><div><h2>Credits & Billing</h2><p>Credit balances come from verified billing metadata.</p></div></div><div className="credit-settings"><strong>{typeof user.userMetadata?.ai_credits === 'number' ? user.userMetadata.ai_credits.toLocaleString() : '0'}</strong><span>AI credits available</span></div><div className="billing-row"><CreditCard size={18} /><span><strong>Billing provider</strong><small>Stripe connection required for purchases</small></span><StatusBadge status="not_connected" /></div></article>
       </div>
