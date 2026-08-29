@@ -1,8 +1,41 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
 import OpenAI from 'openai'
 import { GoogleGenAI } from '@google/genai'
 import { createFileRoute } from '@tanstack/react-router'
+type BbsUser = {
+  id: string
+  email: string
+}
+
+const hash = (value: string) =>
+  createHash('sha256').update(value).digest('hex')
+
+const getAuthenticatedUser = async (request: Request): Promise<BbsUser> => {
+  const sessionToken = request.headers
+    .get('cookie')
+    ?.match(/(?:^|;\s*)bbs_session=([^;]+)/)?.[1]
+
+  if (!sessionToken) {
+    throw new Error('UNAUTHORIZED')
+  }
+
+  const sql = getDatabase()
+
+  const [user] = await sql`
+    SELECT u.id, u.email
+    FROM bbs_sessions s
+    JOIN bbs_users u ON u.id = s.user_id
+    WHERE s.token_hash = ${hash(sessionToken)}
+      AND s.expires_at > NOW()
+  `
+
+  if (!user) {
+    throw new Error('UNAUTHORIZED')
+  }
+
+  return user as BbsUser
+}
 
 type ProviderId = 'bbs-ai' | 'codex' | 'gemini' | 'lovable'
 
