@@ -1,48 +1,22 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
 import OpenAI from 'openai'
-import { GoogleGenAI } from '@google/genai'
 import { createFileRoute } from '@tanstack/react-router'
+
 type BbsUser = {
   id: string
   email: string
 }
 
-const hash = (value: string) =>
-  createHash('sha256').update(value).digest('hex')
-
-const getAuthenticatedUser = async (request: Request): Promise<BbsUser> => {
-  const sessionToken = request.headers
-    .get('cookie')
-    ?.match(/(?:^|;\s*)bbs_session=([^;]+)/)?.[1]
-
-  if (!sessionToken) {
-    throw new Error('UNAUTHORIZED')
-  }
-
-  const sql = getDatabase()
-
-  const [user] = await sql`
-    SELECT u.id, u.email
-    FROM bbs_sessions s
-    JOIN bbs_users u ON u.id = s.user_id
-    WHERE s.token_hash = ${hash(sessionToken)}
-      AND s.expires_at > NOW()
-  `
-
-  if (!user) {
-    throw new Error('UNAUTHORIZED')
-  }
-
-  return user as BbsUser
-}
-
-type ProviderId = 'bbs-ai' | 'codex' | 'gemini' | 'lovable'
+type ProviderId = 'bbs-ai'
 
 type Action =
   | 'create-project'
   | 'add-message'
   | 'add-domain'
+
+const hash = (value: string) =>
+  createHash('sha256').update(value).digest('hex')
 
 const getDatabase = () => {
   const databaseUrl = process.env.DATABASE_URL
@@ -54,11 +28,42 @@ const getDatabase = () => {
   return neon(databaseUrl)
 }
 
+const getAuthenticatedUser = async (
+  request: Request,
+): Promise<BbsUser> => {
+  const sessionToken = request.headers
+    .get('cookie')
+    ?.match(/(?:^|;\s*)bbs_session=([^;]+)/)?.[1]
+
+  if (!sessionToken) {
+    throw new Error('UNAUTHORIZED')
+  }
+
+  const sql = getDatabase()
+
+  const [user] = await sql`
+    SELECT
+      u.id,
+      u.email
+    FROM bbs_sessions s
+    JOIN bbs_users u
+      ON u.id = s.user_id
+    WHERE s.token_hash = ${hash(sessionToken)}
+      AND s.expires_at > NOW()
+  `
+
+  if (!user) {
+    throw new Error('UNAUTHORIZED')
+  }
+
+  return user as BbsUser
+}
+
 const json = (body: unknown, status = 200) => {
   return Response.json(body, { status })
 }
 
-const cleanHtml = (value: string) => {
+function cleanHtml(value: string) {
   let html = String(value || '').trim()
 
   html = html
@@ -86,8 +91,9 @@ const ensureTables = async () => {
   await sql`
     CREATE TABLE IF NOT EXISTS bbs_projects (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       name TEXT NOT NULL,
-      initial_prompt TEXT NOT NULL,
+      initial_prompt TEXT NOT NULL DEFAULT '',
       provider TEXT NOT NULL DEFAULT 'bbs-ai',
       status TEXT NOT NULL DEFAULT 'draft',
       published_url TEXT,
@@ -100,6 +106,7 @@ const ensureTables = async () => {
   await sql`
     CREATE TABLE IF NOT EXISTS bbs_builder_messages (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       project_id TEXT NOT NULL,
       role TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -111,6 +118,7 @@ const ensureTables = async () => {
   await sql`
     CREATE TABLE IF NOT EXISTS bbs_domains (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       project_id TEXT,
       hostname TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'needs_configuration',
@@ -122,6 +130,7 @@ const ensureTables = async () => {
   await sql`
     CREATE TABLE IF NOT EXISTS bbs_deployments (
       id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
       project_id TEXT NOT NULL,
       project_name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'building',
@@ -133,7 +142,7 @@ const ensureTables = async () => {
 }
 
 const websitePrompt = (prompt: string) => `
-You are the website-generation engine for Better Brand Services (BBS).
+You are BBS AI, the official website-generation engine for Better Brand Services.
 
 Create a complete, polished, production-quality SINGLE-FILE HTML website.
 
@@ -174,96 +183,7 @@ async function generateWithBbsAI(prompt: string) {
   return cleanHtml(response.output_text)
 }
 
-async function generateWithCodex(prompt: string) {
-  const apiKey = process.env.OPENAI_API_KEY
-
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing.')
-  }
-
-  const openai = new OpenAI({
-    apiKey,
-  })
-
-  const response = await openai.responses.create({
-    model: process.env.CODEX_MODEL || 'gpt-5.3-codex',
-    reasoning: {
-      effort: 'medium',
-    },
-    input: websitePrompt(prompt),
-  })
-
-  return cleanHtml(response.output_text)
-}
-
-async function generateWithGemini(prompt: string) {
-  const apiKey = process.env.GEMINI_API_KEY
-
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing.')
-  }
-
-  const ai = new GoogleGenAI({
-    apiKey,
-  })
-
-  const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-    contents: websitePrompt(prompt),
-  })
-
-  return cleanHtml(response.text || '')
-}
-
-async function generateWithLovable(prompt: string) {
-  const apiKey = process.env.LOVABLE_API_KEY
-
-  if (!apiKey) {
-    throw new Error(
-      'LOVABLE_API_KEY is not configured. Lovable integration requires a supported Lovable API/integration.',
-    )
-  }
-
-  /*
-   * IMPORTANT:
-   * Do not pretend that LOVABLE_API_KEY is an OpenAI-compatible
-   * API key. The actual Lovable integration should be added here
-   * once you have the supported Lovable API endpoint/SDK.
-   *
-   * For now we return a clear server-side error instead of
-   * silently generating with another provider.
-   */
-
-  void prompt
-
-  throw new Error(
-    'Lovable is selected, but its supported API integration has not been configured yet.',
-  )
-}
-
-async function generateWebsite(
-  provider: ProviderId,
-  prompt: string,
-) {
-  switch (provider) {
-    case 'bbs-ai':
-      return generateWithBbsAI(prompt)
-
-    case 'codex':
-      return generateWithCodex(prompt)
-
-    case 'gemini':
-      return generateWithGemini(prompt)
-
-    case 'lovable':
-      return generateWithLovable(prompt)
-
-    default:
-      throw new Error('Unsupported AI provider.')
-  }
-}
-
-const getWorkspace = async () => {
+const getWorkspace = async (user: BbsUser) => {
   const sql = getDatabase()
 
   const [
@@ -284,6 +204,7 @@ const getWorkspace = async () => {
         created_at,
         updated_at
       FROM bbs_projects
+      WHERE user_id = ${user.id}
       ORDER BY updated_at DESC
     `,
 
@@ -296,6 +217,7 @@ const getWorkspace = async () => {
         created_at,
         updated_at
       FROM bbs_domains
+      WHERE user_id = ${user.id}
       ORDER BY created_at DESC
     `,
 
@@ -309,6 +231,7 @@ const getWorkspace = async () => {
         is_latest,
         created_at
       FROM bbs_deployments
+      WHERE user_id = ${user.id}
       ORDER BY created_at DESC
     `,
 
@@ -321,6 +244,7 @@ const getWorkspace = async () => {
         status,
         created_at
       FROM bbs_builder_messages
+      WHERE user_id = ${user.id}
       ORDER BY created_at ASC
     `,
   ])
@@ -334,12 +258,12 @@ const getWorkspace = async () => {
 }
 
 const createProject = async ({
+  user,
   prompt,
-  provider,
   name,
 }: {
+  user: BbsUser
   prompt: string
-  provider: ProviderId
   name: string
 }) => {
   const sql = getDatabase()
@@ -351,6 +275,7 @@ const createProject = async ({
   await sql`
     INSERT INTO bbs_projects (
       id,
+      user_id,
       name,
       initial_prompt,
       provider,
@@ -358,9 +283,10 @@ const createProject = async ({
     )
     VALUES (
       ${projectId},
+      ${user.id},
       ${name},
       ${prompt},
-      ${provider},
+      'bbs-ai',
       'building'
     )
   `
@@ -368,6 +294,7 @@ const createProject = async ({
   await sql`
     INSERT INTO bbs_builder_messages (
       id,
+      user_id,
       project_id,
       role,
       content,
@@ -375,6 +302,7 @@ const createProject = async ({
     )
     VALUES (
       ${userMessageId},
+      ${user.id},
       ${projectId},
       'user',
       ${prompt},
@@ -383,23 +311,16 @@ const createProject = async ({
   `
 
   try {
-    const html = await generateWebsite(
-      provider,
-      prompt,
-    )
+    const html = await generateWithBbsAI(prompt)
 
-    if (
-      !html ||
-      !html.toLowerCase().includes('<html')
-    ) {
-      throw new Error(
-        `${provider} returned an invalid website document.`,
-      )
+    if (!html || !html.toLowerCase().includes('<html')) {
+      throw new Error('BBS AI returned an invalid website document.')
     }
 
     await sql`
       INSERT INTO bbs_builder_messages (
         id,
+        user_id,
         project_id,
         role,
         content,
@@ -407,6 +328,7 @@ const createProject = async ({
       )
       VALUES (
         ${generatedMessageId},
+        ${user.id},
         ${projectId},
         'assistant',
         ${html},
@@ -420,6 +342,7 @@ const createProject = async ({
         status = 'draft',
         updated_at = NOW()
       WHERE id = ${projectId}
+        AND user_id = ${user.id}
     `
 
     const [project] = await sql`
@@ -435,6 +358,7 @@ const createProject = async ({
         updated_at
       FROM bbs_projects
       WHERE id = ${projectId}
+        AND user_id = ${user.id}
     `
 
     const [userMessage] = await sql`
@@ -447,6 +371,7 @@ const createProject = async ({
         created_at
       FROM bbs_builder_messages
       WHERE id = ${userMessageId}
+        AND user_id = ${user.id}
     `
 
     const [generatedMessage] = await sql`
@@ -459,6 +384,7 @@ const createProject = async ({
         created_at
       FROM bbs_builder_messages
       WHERE id = ${generatedMessageId}
+        AND user_id = ${user.id}
     `
 
     return {
@@ -473,6 +399,7 @@ const createProject = async ({
         status = 'failed',
         updated_at = NOW()
       WHERE id = ${projectId}
+        AND user_id = ${user.id}
     `
 
     throw error
@@ -480,9 +407,11 @@ const createProject = async ({
 }
 
 const addMessage = async ({
+  user,
   projectId,
   content,
 }: {
+  user: BbsUser
   projectId: string
   content: string
 }) => {
@@ -501,6 +430,7 @@ const addMessage = async ({
       updated_at
     FROM bbs_projects
     WHERE id = ${projectId}
+      AND user_id = ${user.id}
   `
 
   if (!project) {
@@ -511,6 +441,7 @@ const addMessage = async ({
     SELECT content
     FROM bbs_builder_messages
     WHERE project_id = ${projectId}
+      AND user_id = ${user.id}
       AND role = 'assistant'
       AND status = 'complete'
     ORDER BY created_at DESC
@@ -523,6 +454,7 @@ const addMessage = async ({
   await sql`
     INSERT INTO bbs_builder_messages (
       id,
+      user_id,
       project_id,
       role,
       content,
@@ -530,6 +462,7 @@ const addMessage = async ({
     )
     VALUES (
       ${userMessageId},
+      ${user.id},
       ${projectId},
       'user',
       ${content},
@@ -557,23 +490,18 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
 `
 
   try {
-    const html = await generateWebsite(
-      project.provider as ProviderId,
-      regenerationPrompt,
-    )
+    const html = await generateWithBbsAI(regenerationPrompt)
 
-    if (
-      !html ||
-      !html.toLowerCase().includes('<html')
-    ) {
+    if (!html || !html.toLowerCase().includes('<html')) {
       throw new Error(
-        'The AI returned an invalid website document.',
+        'BBS AI returned an invalid website document.',
       )
     }
 
     await sql`
       INSERT INTO bbs_builder_messages (
         id,
+        user_id,
         project_id,
         role,
         content,
@@ -581,6 +509,7 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
       )
       VALUES (
         ${generatedMessageId},
+        ${user.id},
         ${projectId},
         'assistant',
         ${html},
@@ -594,6 +523,7 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
         status = 'draft',
         updated_at = NOW()
       WHERE id = ${projectId}
+        AND user_id = ${user.id}
     `
 
     const [userMessage] = await sql`
@@ -606,6 +536,7 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
         created_at
       FROM bbs_builder_messages
       WHERE id = ${userMessageId}
+        AND user_id = ${user.id}
     `
 
     const [generatedMessage] = await sql`
@@ -618,6 +549,7 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
         created_at
       FROM bbs_builder_messages
       WHERE id = ${generatedMessageId}
+        AND user_id = ${user.id}
     `
 
     return {
@@ -629,6 +561,7 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
       UPDATE bbs_builder_messages
       SET status = 'failed'
       WHERE id = ${userMessageId}
+        AND user_id = ${user.id}
     `
 
     throw error
@@ -636,9 +569,11 @@ Return ONLY the complete raw HTML document beginning with <!doctype html>.
 }
 
 const addDomain = async ({
+  user,
   hostname,
   projectId,
 }: {
+  user: BbsUser
   hostname: string
   projectId: string | null
 }) => {
@@ -653,17 +588,32 @@ const addDomain = async ({
     throw new Error('Enter a domain name.')
   }
 
+  if (projectId) {
+    const [project] = await sql`
+      SELECT id
+      FROM bbs_projects
+      WHERE id = ${projectId}
+        AND user_id = ${user.id}
+    `
+
+    if (!project) {
+      throw new Error('Project not found.')
+    }
+  }
+
   const id = randomBytes(16).toString('hex')
 
   await sql`
     INSERT INTO bbs_domains (
       id,
+      user_id,
       project_id,
       hostname,
       status
     )
     VALUES (
       ${id},
+      ${user.id},
       ${projectId},
       ${cleanHostname},
       'needs_configuration'
@@ -680,30 +630,24 @@ const addDomain = async ({
       updated_at
     FROM bbs_domains
     WHERE id = ${id}
+      AND user_id = ${user.id}
   `
 
   return domain
 }
 
-/*
- * TanStack Start server route.
- *
- * File:
- * src/routes/api/builder-workspace.ts
- *
- * Endpoint:
- * /api/builder-workspace
- */
 export const Route = createFileRoute(
   '/api/builder-workspace',
 )({
   server: {
     handlers: {
-      GET: async () => {
+      GET: async ({ request }) => {
         try {
+          const user = await getAuthenticatedUser(request)
+
           await ensureTables()
 
-          const workspace = await getWorkspace()
+          const workspace = await getWorkspace(user)
 
           return json(workspace)
         } catch (error: any) {
@@ -711,6 +655,13 @@ export const Route = createFileRoute(
             'BBS WORKSPACE GET ERROR:',
             error,
           )
+
+          if (error?.message === 'UNAUTHORIZED') {
+            return json(
+              { error: 'You must be signed in.' },
+              401,
+            )
+          }
 
           return json(
             {
@@ -725,6 +676,8 @@ export const Route = createFileRoute(
 
       POST: async ({ request }) => {
         try {
+          const user = await getAuthenticatedUser(request)
+
           await ensureTables()
 
           const body = await request.json()
@@ -734,10 +687,6 @@ export const Route = createFileRoute(
             const prompt = String(
               body.prompt || '',
             ).trim()
-
-            const provider = String(
-              body.provider || 'bbs-ai',
-            ) as ProviderId
 
             const name = String(
               body.name || 'BBS Website',
@@ -753,29 +702,11 @@ export const Route = createFileRoute(
               )
             }
 
-            if (
-              ![
-                'bbs-ai',
-                'codex',
-                'gemini',
-                'lovable',
-              ].includes(provider)
-            ) {
-              return json(
-                {
-                  error:
-                    'Unsupported AI provider.',
-                },
-                422,
-              )
-            }
-
-            const result =
-              await createProject({
-                prompt,
-                provider,
-                name,
-              })
+            const result = await createProject({
+              user,
+              prompt,
+              name,
+            })
 
             return json(result)
           }
@@ -792,8 +723,7 @@ export const Route = createFileRoute(
             if (!projectId) {
               return json(
                 {
-                  error:
-                    'Project ID is required.',
+                  error: 'Project ID is required.',
                 },
                 422,
               )
@@ -809,11 +739,11 @@ export const Route = createFileRoute(
               )
             }
 
-            const result =
-              await addMessage({
-                projectId,
-                content,
-              })
+            const result = await addMessage({
+              user,
+              projectId,
+              content,
+            })
 
             return json(result)
           }
@@ -827,19 +757,18 @@ export const Route = createFileRoute(
               ? String(body.projectId)
               : null
 
-            const domain =
-              await addDomain({
-                hostname,
-                projectId,
-              })
+            const domain = await addDomain({
+              user,
+              hostname,
+              projectId,
+            })
 
             return json({ domain })
           }
 
           return json(
             {
-              error:
-                'Unknown workspace action.',
+              error: 'Unknown workspace action.',
             },
             400,
           )
@@ -848,6 +777,13 @@ export const Route = createFileRoute(
             'BBS WORKSPACE POST ERROR:',
             error,
           )
+
+          if (error?.message === 'UNAUTHORIZED') {
+            return json(
+              { error: 'You must be signed in.' },
+              401,
+            )
+          }
 
           return json(
             {
