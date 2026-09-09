@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
-import OpenAI from 'openai'
+import { generateWebsite, reviseWebsite } from '../../lib/bbs-ai-engine'
 import { createFileRoute } from '@tanstack/react-router'
 
 /**
@@ -150,33 +150,6 @@ No commentary, no markdown fences.
 /**
  * The single BBS AI generation call. BBS AI runs on one engine only.
  */
-async function generateWithBbsAI(input: string) {
-  const apiKey = process.env.OPENAI_API_KEY
-
-  if (!apiKey) {
-    throw new Error(
-      'BBS AI is not configured. The generation engine key is missing.',
-    )
-  }
-
-  const client = new OpenAI({ apiKey })
-
-  const model = process.env.BBS_AI_MODEL || 'gpt-4o'
-
-  const response = await client.chat.completions.create({
-    model,
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You are BBS AI, an autonomous senior web engineer that outputs complete, production-quality single-file HTML websites and nothing else.',
-      },
-      { role: 'user', content: input },
-    ],
-  })
-
-  return cleanHtml(response.choices[0]?.message?.content || '')
-}
 
 const getWorkspace = async () => {
   const sql = getDatabase()
@@ -232,7 +205,7 @@ const createProject = async ({
   `
 
   try {
-    const html = await generateWithBbsAI(buildPrompt(prompt))
+    const html = await generateWebsite(prompt)
 
     if (!html || !html.toLowerCase().includes('<html')) {
       throw new Error('BBS AI returned an invalid website document.')
@@ -304,14 +277,11 @@ const addMessage = async ({
   `
 
   try {
-    const html = await generateWithBbsAI(
-      revisePrompt({
-        initialPrompt: project.initial_prompt,
-        instruction: content,
-        currentHtml: latestGenerated?.content || '',
-      }),
-    )
-
+    const html = await reviseWebsite({
+  initialPrompt: project.initial_prompt,
+  instruction: content,
+  currentHtml: latestGenerated?.content || '',
+ })
     if (!html || !html.toLowerCase().includes('<html')) {
       throw new Error('BBS AI returned an invalid website document.')
     }

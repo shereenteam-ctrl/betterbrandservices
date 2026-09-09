@@ -406,15 +406,13 @@ function HomePage() {
     const formData = new FormData(form)
 
     try {
-      const response = await fetch('/__forms.html', {
+      const response = await fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(
-          Array.from(formData.entries()).map(([key, value]) => [key, String(value)]),
-        ).toString(),
+        body: formData,
       })
+      const data = await response.json().catch(() => ({}))
 
-      if (!response.ok) throw new Error('Submission failed')
+      if (!response.ok) throw new Error(data.error || 'Submission failed')
 
       setFormStatus('success')
       form.reset()
@@ -773,15 +771,10 @@ function HomePage() {
             className="contact-form"
             name="better-brand-contact"
             method="POST"
-            action="/__forms.html"
-            data-netlify="true"
-            netlify-honeypot="bot-field"
             onSubmit={handleSubmit}
             onChange={clearFormNotice}
             aria-busy={formStatus === 'sending'}
           >
-            <input type="hidden" name="form-name" value="better-brand-contact" />
-            <input type="hidden" name="subject" value="New Better Brand Services inquiry" data-remove-prefix />
             <p className="hidden-field" aria-hidden="true">
               <label>Do not fill this out: <input name="bot-field" tabIndex={-1} autoComplete="off" /></label>
             </p>
