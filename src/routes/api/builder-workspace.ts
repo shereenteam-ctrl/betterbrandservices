@@ -1,14 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
-import OpenAI from 'openai'
 import { createFileRoute } from '@tanstack/react-router'
+import { generateWithBbsAI as runBbsAiEngine } from '../../lib/bbs-ai/engine'
 
 type BbsUser = {
   id: string
   email: string
 }
-
-type ProviderId = 'bbs-ai'
 
 type Action =
   | 'create-project'
@@ -139,6 +137,26 @@ const ensureTables = async () => {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
+  
+    await sql`
+    ALTER TABLE bbs_projects
+    ADD COLUMN IF NOT EXISTS user_id TEXT
+  `
+
+  await sql`
+    ALTER TABLE bbs_builder_messages
+    ADD COLUMN IF NOT EXISTS user_id TEXT
+  `
+
+  await sql`
+    ALTER TABLE bbs_domains
+    ADD COLUMN IF NOT EXISTS user_id TEXT
+  `
+
+  await sql`
+    ALTER TABLE bbs_deployments
+    ADD COLUMN IF NOT EXISTS user_id TEXT
+  `
 }
 
 const websitePrompt = (prompt: string) => `
@@ -165,22 +183,11 @@ Requirements:
 `
 
 async function generateWithBbsAI(prompt: string) {
-  const apiKey = process.env.OPENAI_API_KEY
-
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY is missing.')
-  }
-
-  const openai = new OpenAI({
-    apiKey,
+  const result = await runBbsAiEngine({
+    prompt: websitePrompt(prompt),
   })
 
-  const response = await openai.responses.create({
-    model: process.env.BBS_AI_MODEL || 'gpt-5.6',
-    input: websitePrompt(prompt),
-  })
-
-  return cleanHtml(response.output_text)
+  return cleanHtml(result.html)
 }
 
 const getWorkspace = async (user: BbsUser) => {
@@ -310,12 +317,24 @@ const createProject = async ({
     )
   `
 
-  try {
-    const html = await generateWithBbsAI(prompt)
+ try {
+  const html = await generateWithBbsAI(prompt)
+  console.log('BBS AI HTML:', html)
 
-    if (!html || !html.toLowerCase().includes('<html')) {
-      throw new Error('BBS AI returned an invalid website document.')
-    }
+if (
+  !html ||
+  !html.toLowerCase().includes('<!doctype html') ||
+  !html.toLowerCase().includes('<html') ||
+  !html.toLowerCase().includes('</html>')
+) {
+  throw new Error(
+    'BBS AI returned an invalid website document.',
+  )
+}
+
+  // Continue with the rest of your existing createProject code here...
+
+  // continue using html here...
 
     await sql`
       INSERT INTO bbs_builder_messages (

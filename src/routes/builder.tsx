@@ -64,7 +64,7 @@ export const Route = createFileRoute('/builder')({
 type AuthState = 'checking' | 'email' | 'code' | 'authenticated'
 type PlatformTab = 'projects' | 'builder' | 'domains' | 'deployments' | 'settings'
 type BuilderStage = 'landing' | 'create' | 'workspace'
-type ProviderId = 'bbs-ai' | 'codex' | 'gemini' | 'lovable'
+type ProviderId = 'bbs-ai'
 
 type Project = {
   id: string
@@ -124,10 +124,7 @@ const navItems: Array<{ id: PlatformTab; label: string; icon: LucideIcon }> = [
 ]
 
 const providers: Array<{ id: ProviderId; name: string; description: string; badge?: string }> = [
-  { id: 'bbs-ai', name: 'BBS AI', description: 'Flagship BBS workflow for brand-led website creation.', badge: 'Default' },
-  { id: 'codex', name: 'Codex', description: 'External provider integration prepared for its supported API.' },
-  { id: 'gemini', name: 'Gemini', description: 'External provider integration prepared for its supported API.' },
-  { id: 'lovable', name: 'Lovable', description: 'External provider integration prepared for supported workflows.' },
+  { id: 'bbs-ai', name: 'BBS AI', description: 'The official AI website-generation engine from Better Brand Services.', badge: 'BBS AI' },
 ]
 
 function BuilderPage() {
