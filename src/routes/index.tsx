@@ -400,27 +400,28 @@ function HomePage() {
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setFormStatus('sending')
-    const form = event.currentTarget
-    const formData = new FormData(form)
+  event.preventDefault()
+  setFormStatus('sending')
 
-    try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        body: formData,
-      })
-      const data = await response.json().catch(() => ({}))
+  const form = event.currentTarget
+  const formData = new FormData(form)
 
-      if (!response.ok) throw new Error(data.error || 'Submission failed')
+  try {
+    const response = await fetch('/api/contact', {
+      method: 'POST',
+      body: formData,
+    })
 
-      setFormStatus('success')
-      form.reset()
-      setServiceChoice('')
-    } catch {
-      setFormStatus('error')
-    }
+    if (!response.ok) throw new Error('Submission failed')
+
+    setFormStatus('success')
+    form.reset()
+    setServiceChoice('')
+  } catch (error) {
+    console.error('Contact form submission failed:', error)
+    setFormStatus('error')
   }
+}
 
   const clearFormNotice = () => {
     if (formStatus === 'success' || formStatus === 'error') setFormStatus('idle')
@@ -770,11 +771,13 @@ function HomePage() {
           <form
             className="contact-form"
             name="better-brand-contact"
-            method="POST"
+            netlify-honeypot="bot-field"
             onSubmit={handleSubmit}
             onChange={clearFormNotice}
             aria-busy={formStatus === 'sending'}
           >
+            <input type="hidden" name="form-name" value="better-brand-contact" />
+            <input type="hidden" name="subject" value="New Better Brand Services inquiry" data-remove-prefix />
             <p className="hidden-field" aria-hidden="true">
               <label>Do not fill this out: <input name="bot-field" tabIndex={-1} autoComplete="off" /></label>
             </p>

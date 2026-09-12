@@ -26,27 +26,6 @@ const json = (body: unknown, status = 200) => {
   return Response.json(body, { status })
 }
 
-const cleanHtml = (value: string) => {
-  let html = String(value || '').trim()
-
-  html = html
-    .replace(/^```html\s*/i, '')
-    .replace(/^```HTML\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
-
-  const doctypeIndex = html.toLowerCase().indexOf('<!doctype')
-  const htmlIndex = html.toLowerCase().indexOf('<html')
-
-  if (doctypeIndex >= 0) {
-    html = html.slice(doctypeIndex)
-  } else if (htmlIndex >= 0) {
-    html = `<!doctype html>\n${html.slice(htmlIndex)}`
-  }
-
-  return html.trim()
-}
 
 const ensureTables = async () => {
   const sql = getDatabase()
@@ -100,52 +79,6 @@ const ensureTables = async () => {
   `
 }
 
-const buildPrompt = (prompt: string) => `
-You are BBS AI, the autonomous website-building engine for Better Brand Services (BBS).
-
-You independently understand the request, plan the pages and sections, and build a
-complete, polished, production-quality SINGLE-FILE HTML website.
-
-USER REQUEST:
-${prompt}
-
-Requirements:
-- Return ONLY raw HTML. No commentary, no markdown fences.
-- Start the document with <!doctype html>.
-- Put all CSS inside a <style> tag and any JavaScript inside <script> tags.
-- Make the website fully responsive across phone, tablet, and desktop.
-- Use accessible, semantic HTML with a clear visual hierarchy.
-- Include realistic, relevant content based on the user's request.
-- Include navigation, a hero section, all relevant content sections, clear CTAs, and a footer.
-- If the request implies multiple pages, represent each page as a well-structured section in the single file.
-- Ship a modern, premium design — never a generic template.
-`
-
-const revisePrompt = ({
-  initialPrompt,
-  instruction,
-  currentHtml,
-}: {
-  initialPrompt: string
-  instruction: string
-  currentHtml: string
-}) => `
-You are BBS AI. You are revising an EXISTING website that you previously built.
-Modify the current project instead of rebuilding it from scratch. Preserve everything
-the user did not ask to change and apply the requested change carefully and completely.
-
-ORIGINAL WEBSITE BRIEF:
-${initialPrompt}
-
-USER'S NEW INSTRUCTION:
-${instruction}
-
-CURRENT WEBSITE HTML:
-${currentHtml}
-
-Return ONLY the complete, updated raw HTML document beginning with <!doctype html>.
-No commentary, no markdown fences.
-`
 
 /**
  * The single BBS AI generation call. BBS AI runs on one engine only.
