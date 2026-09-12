@@ -1,7 +1,11 @@
-import { Link } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { Sparkles, ArrowLeft } from 'lucide-react'
 
-export default function ComingSoon() {
+export const Route = createFileRoute('/coming-soon')({
+  component: ComingSoon,
+})
+
+function ComingSoon() {
   return (
     <main className="min-h-screen bg-[#080b14] text-white flex items-center justify-center px-6">
       <div className="text-center max-w-2xl">
