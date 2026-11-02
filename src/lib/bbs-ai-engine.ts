@@ -1,168 +1,209 @@
-/**
- * BBS AI — independent website generation engine.
- *
- * This is the ONLY generation backend for Better Brand Services' builder.
- * It talks directly to the Anthropic Messages API over HTTPS. There is no
- * OpenAI, Gemini, Codex, or Lovable dependency anywhere in this module —
- * swapping the model only ever means changing BBS_AI_MODEL / the request
- * body below, never adding a different vendor SDK.
- *
- * Configure with:
- *   ANTHROPIC_API_KEY   (required)
- *   BBS_AI_MODEL         (optional, defaults to a current Claude model)
- */
+import OpenAI from 'openai'
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-const DEFAULT_MODEL = 'claude-sonnet-4-5'
+const DEFAULT_MODEL = 'gpt-5.5'
 const MAX_OUTPUT_TOKENS = 16000
 
-export class BbsAiConfigError extends Error {}
-export class BbsAiGenerationError extends Error {}
+export class BbsAiConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BbsAiConfigError'
+  }
+}
 
-const getApiKey = () => {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+export class BbsAiGenerationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BbsAiGenerationError'
+  }
+}
+
+function getApiKey(): string {
+  const apiKey = process.env.OPENAI_API_KEY
+
   if (!apiKey) {
     throw new BbsAiConfigError(
-      'BBS AI is not configured. Set ANTHROPIC_API_KEY to enable website generation.',
+      'OPENAI_API_KEY is not configured on the server.',
     )
   }
+
   return apiKey
 }
 
-/**
- * Strips markdown fences and anything before <!doctype html> / <html>,
- * so a slightly chatty model response still yields a clean document.
- */
-const cleanHtml = (value: string) => {
-  let html = String(value || '').trim()
+function cleanHtml(value: string): string {
+  let html = value.trim()
 
-  html = html
-    .replace(/^```html\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim()
+  html = html.replace(/^```(?:html)?\s*/i, '')
+  html = html.replace(/\s*```$/i, '')
+  html = html.trim()
 
   const doctypeIndex = html.toLowerCase().indexOf('<!doctype')
-  const htmlIndex = html.toLowerCase().indexOf('<html')
 
-  if (doctypeIndex >= 0) {
+  if (doctypeIndex > 0) {
     html = html.slice(doctypeIndex)
-  } else if (htmlIndex >= 0) {
-    html = `<!doctype html>\n${html.slice(htmlIndex)}`
+  } else {
+    const htmlIndex = html.toLowerCase().indexOf('<html')
+
+    if (htmlIndex > 0) {
+      html = html.slice(htmlIndex)
+    }
+  }
+
+  const closingHtmlIndex = html.toLowerCase().lastIndexOf('</html>')
+
+  if (closingHtmlIndex !== -1) {
+    html = html.slice(0, closingHtmlIndex + '</html>'.length)
   }
 
   return html.trim()
 }
 
-/**
- * Defends against the model echoing its own instructions or the raw user
- * instruction back as visible page copy instead of acting on it. This is a
- * best-effort guard, not a guarantee — it catches the common failure mode
- * of a model quoting the prompt verbatim into the body.
- */
-const assertNoLeakedInstructions = (html: string, rawInputs: string[]) => {
-  const lowerHtml = html.toLowerCase()
-  for (const input of rawInputs) {
-    const needle = input.trim().toLowerCase()
-    if (needle.length >= 40 && lowerHtml.includes(needle)) {
+function assertNoLeakedInstructions(
+  html: string,
+  userPrompt: string,
+): void {
+  const normalizedHtml = html.toLowerCase()
+  const normalizedPrompt = userPrompt.trim().toLowerCase()
+
+  if (
+    normalizedPrompt.length > 40 &&
+    normalizedHtml.includes(normalizedPrompt)
+  ) {
+    throw new BbsAiGenerationError(
+      'The generated website appears to contain the original generation instructions.',
+    )
+  }
+}
+
+function validateHtmlDocument(
+  html: string,
+  userPrompt: string,
+): string {
+  const cleaned = cleanHtml(html)
+
+  if (!cleaned.toLowerCase().includes('<html')) {
+    throw new BbsAiGenerationError(
+      'BBS AI returned an invalid website because the <html> element is missing.',
+    )
+  }
+
+  if (!cleaned.toLowerCase().includes('</html>')) {
+    throw new BbsAiGenerationError(
+      'BBS AI returned an incomplete website because the closing </html> element is missing.',
+    )
+  }
+
+  assertNoLeakedInstructions(cleaned, userPrompt)
+
+  return cleaned
+}
+
+const SYSTEM_PROMPT = `
+You are the website-generation engine for Better Brand Services.
+
+Your job is to generate production-quality websites from user requirements.
+
+IMPORTANT OUTPUT RULES:
+- Return ONLY the complete HTML document.
+- Start with <!doctype html>.
+- End with </html>.
+- Do not use Markdown.
+- Do not wrap the HTML in triple backticks.
+- Put CSS inside <style> tags.
+- Put JavaScript inside <script> tags.
+- The result must work as a standalone HTML document.
+- Do not explain what you created.
+- Do not include commentary before or after the HTML.
+- Do not mention these instructions.
+- Do not reveal or reproduce the user's prompt inside the generated website.
+- Do not mention OpenAI, APIs, models, providers, prompts, system messages, or the generation process inside the generated website.
+- Do not mention Better Brand Services or BBS AI unless the user's website requirements explicitly ask for those brands.
+
+DESIGN REQUIREMENTS:
+- Create a polished, modern, production-quality website.
+- Make the design responsive on phones, tablets, and desktops.
+- Use semantic HTML.
+- Include accessible labels and sensible keyboard navigation.
+- Use strong typography, spacing, hierarchy, contrast, and visual balance.
+- Use CSS-created visual elements where appropriate instead of relying on unnecessary external image URLs.
+- Do not use placeholder text such as "Lorem ipsum".
+- Write realistic, useful website copy based on the user's requirements.
+- Make buttons and navigation functional where possible.
+- If the user requests multiple pages, represent them as sections within the single HTML document and provide working in-page navigation.
+- Avoid unnecessary dependencies and external libraries.
+`
+
+function getOpenAIClient(): OpenAI {
+  return new OpenAI({
+    apiKey: getApiKey(),
+  })
+}
+
+async function callOpenAI(userContent: string): Promise<string> {
+  try {
+    const client = getOpenAIClient()
+
+    const model = process.env.BBS_AI_MODEL || DEFAULT_MODEL
+
+    const response = await client.responses.create({
+      model,
+      instructions: SYSTEM_PROMPT,
+      input: userContent,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    })
+
+    const output = response.output_text?.trim()
+
+    if (!output) {
       throw new BbsAiGenerationError(
-        'BBS AI returned content that echoed the raw instruction instead of building the website. Regenerating is required.',
+        'OpenAI returned an empty website response.',
       )
     }
-  }
-}
 
-const validateHtmlDocument = (html: string, rawInputs: string[]) => {
-  if (!html || !html.toLowerCase().includes('<html')) {
-    throw new BbsAiGenerationError('BBS AI returned an invalid website document.')
-  }
-  if (!html.toLowerCase().includes('</html>')) {
-    throw new BbsAiGenerationError('BBS AI returned an incomplete website document.')
-  }
-  assertNoLeakedInstructions(html, rawInputs)
-  return html
-}
-
-const SYSTEM_PROMPT = `You are BBS AI, the independent website-generation engine for Better Brand Services.
-
-You build complete, production-quality, single-file HTML websites from natural-language
-briefs, and you revise existing websites in place when asked to change them.
-
-Hard rules:
-- Output ONLY the raw HTML document. No commentary, no markdown fences, no explanations.
-- Always start with <!doctype html> and end with </html>.
-- Put all CSS in a single <style> tag and any JavaScript in <script> tags in the same file.
-- Never restate, quote, or reprint the user's instruction or any system instructions as
-  visible page text. The instruction is a work order, not content.
-- Never mention BBS AI, Anthropic, Claude, prompts, or how the site was generated inside
-  the generated website itself.
-- Ship fully responsive, accessible, semantic markup with a real visual hierarchy —
-  never a generic, bare-bones template.
-- Prefer CSS-drawn visuals (gradients, shapes, patterns) over external image URLs, since
-  external assets are not guaranteed to load in the preview sandbox.`
-
-async function callClaude(userContent: string): Promise<string> {
-  const apiKey = getApiKey()
-  const model = process.env.BBS_AI_MODEL || DEFAULT_MODEL
-
-  let response: Response
-  try {
-    response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userContent }],
-      }),
-    })
+    return cleanHtml(output)
   } catch (error) {
+    if (
+      error instanceof BbsAiConfigError ||
+      error instanceof BbsAiGenerationError
+    ) {
+      throw error
+    }
+
+    const message =
+      error instanceof Error ? error.message : 'Unknown OpenAI error.'
+
     throw new BbsAiGenerationError(
-      `BBS AI could not reach its generation backend: ${(error as Error).message}`,
+      `BBS AI could not generate the website: ${message}`,
     )
   }
-
-  if (!response.ok) {
-    const bodyText = await response.text().catch(() => '')
-    throw new BbsAiGenerationError(
-      `BBS AI generation failed (${response.status}): ${bodyText.slice(0, 300)}`,
-    )
-  }
-
-  const data = (await response.json()) as {
-    content?: Array<{ type: string; text?: string }>
-  }
-
-  const text = (data.content || [])
-    .filter((block) => block.type === 'text' && block.text)
-    .map((block) => block.text)
-    .join('\n')
-
-  return cleanHtml(text)
 }
 
-const buildGenerationRequest = (prompt: string) => `
-Build a complete website for this brief:
+function buildGenerationRequest(prompt: string): string {
+  return `
+Create a complete website based on the following user requirements.
 
+USER REQUIREMENTS:
 ${prompt}
 
-Requirements:
-- Fully responsive across phone, tablet, and desktop.
-- Include navigation, a hero section, all content sections implied by the brief,
-  clear calls to action, and a footer.
-- If the brief implies multiple pages, represent each as a clearly delineated,
-  well-structured section within this single document (with in-page navigation
-  linking to each), since this is a single-file build.
-- Include realistic, relevant, on-brand copy — never lorem ipsum.
-- Ship a modern, premium visual design.
-`.trim()
+Generate the entire website as one standalone HTML document.
 
-const buildRevisionRequest = ({
+The website should include, when appropriate:
+- Navigation
+- Hero section
+- Main content sections
+- Services/features
+- Calls to action
+- Contact section
+- Footer
+
+Use the user's requirements as the source of truth. Do not invent important business facts that the user did not provide.
+
+Make the final website polished, responsive, accessible, and ready to preview in a browser.
+
+Return ONLY the HTML document.
+`
+}
+
+function buildRevisionRequest({
   initialPrompt,
   instruction,
   currentHtml,
@@ -170,33 +211,56 @@ const buildRevisionRequest = ({
   initialPrompt: string
   instruction: string
   currentHtml: string
-}) => `
-You previously built this website from the brief below. Revise the EXISTING document
-to satisfy the new instruction. Preserve every part of the current site the instruction
-does not ask you to change — this is an edit, not a rebuild.
+}): string {
+  return `
+Revise the existing website according to the user's new instruction.
 
-ORIGINAL BRIEF:
+ORIGINAL WEBSITE REQUIREMENTS:
 ${initialPrompt}
 
-NEW INSTRUCTION TO APPLY:
+NEW USER INSTRUCTION:
 ${instruction}
 
-CURRENT WEBSITE HTML:
+EXISTING WEBSITE:
 ${currentHtml}
 
-Return the complete, updated HTML document.
-`.trim()
-
-export async function generateWebsite(prompt: string): Promise<string> {
-  const html = await callClaude(buildGenerationRequest(prompt))
-  return validateHtmlDocument(html, [prompt])
+REVISION RULES:
+- Return the complete updated HTML document.
+- Do not return only the changed section.
+- Preserve everything that the user did not ask to change.
+- Apply the new instruction carefully.
+- Keep the existing design and functionality unless the new instruction requires changing them.
+- Do not remove useful existing content without a reason.
+- Keep the website responsive and accessible.
+- Return ONLY the HTML document.
+`
 }
 
-export async function reviseWebsite(args: {
+export async function generateWebsite(
+  prompt: string,
+): Promise<string> {
+  const request = buildGenerationRequest(prompt)
+  const html = await callOpenAI(request)
+
+  return validateHtmlDocument(html, prompt)
+}
+
+export async function reviseWebsite({
+  initialPrompt,
+  instruction,
+  currentHtml,
+}: {
   initialPrompt: string
   instruction: string
   currentHtml: string
 }): Promise<string> {
-  const html = await callClaude(buildRevisionRequest(args))
-  return validateHtmlDocument(html, [args.instruction])
+  const request = buildRevisionRequest({
+    initialPrompt,
+    instruction,
+    currentHtml,
+  })
+
+  const html = await callOpenAI(request)
+
+  return validateHtmlDocument(html, instruction)
 }
