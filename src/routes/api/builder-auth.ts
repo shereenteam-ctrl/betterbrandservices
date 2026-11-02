@@ -1,13 +1,15 @@
 import { createHash, randomInt, randomBytes } from 'node:crypto'
+
 import { neon } from '@neondatabase/serverless'
 import { Resend } from 'resend'
 import { createFileRoute } from '@tanstack/react-router'
 
-type AuthAction = 'request-code' | 'verify-code'
+type AuthAction = 'request-code' | 'verify-code' | 'logout'
 
 type BbsUser = {
   id: string
   email: string
+  ai_credits: number
 }
 
 const json = (body: unknown, status = 200) =>
@@ -22,31 +24,83 @@ const validEmail = (value: string) =>
 const hash = (value: string) =>
   createHash('sha256').update(value).digest('hex')
 
+export async function getAuthenticatedUser(
+  request: Request,
+): Promise<{ id: string; email: string; ai_credits: number } | null> {
+  const cookie = request.headers.get('cookie') || ''
+  const match = cookie.match(/(?:^|;\s*)bbs_session=([^;]+)/)
+
+  if (!match) return null
+
+  let sessionToken: string
+
+  try {
+    sessionToken = decodeURIComponent(match[1])
+  } catch {
+    return null
+  }
+
+  if (!sessionToken) return null
+
+  await ensureTables()
+
+  const result = await sql()`
+    SELECT u.id, u.email, u.ai_credits
+    FROM bbs_sessions s
+    JOIN bbs_users u ON u.id = s.user_id
+    WHERE s.token_hash = ${hash(sessionToken)}
+      AND s.expires_at > NOW()
+    LIMIT 1
+  `
+
+ const rows = result as unknown as {
+  id: string
+  email: string
+  ai_credits: number
+}[]
+
+if (!rows[0]) {
+  return null
+}
+
+return {
+  id: String(rows[0].id),
+  email: String(rows[0].email),
+  ai_credits: Number(rows[0].ai_credits),
+}
+}
 /**
- * Lazily create the Neon client. Instantiating at module scope would throw
- * during import when DATABASE_URL is not yet configured, which would take
- * down every route in the app (the route tree imports this file). Keeping it
- * lazy means only the auth endpoint fails, with a clear message.
+ * Lazily create the Neon client.
+ *
+ * Keeping this lazy prevents the entire route tree from failing
+ * when DATABASE_URL has not been configured yet.
  */
 let _sql: ReturnType<typeof neon> | null = null
+
 const sql = () => {
   const databaseUrl = process.env.DATABASE_URL
+
   if (!databaseUrl) {
     throw new Error(
       'DATABASE_URL is missing. Connect a database to enable the BBS AI Builder.',
     )
   }
+
   if (!_sql) {
     _sql = neon(databaseUrl)
   }
+
   return _sql
 }
 
 const getResend = () => {
-  if (!process.env.RESEND_API_KEY) {
+  const resendApiKey = process.env.RESEND_API_KEY
+
+  if (!resendApiKey) {
     throw new Error('RESEND_API_KEY is missing.')
   }
-  return new Resend(process.env.RESEND_API_KEY)
+
+  return new Resend(resendApiKey)
 }
 
 const ensureTables = async () => {
@@ -69,6 +123,11 @@ const ensureTables = async () => {
   `
 
   await sql()`
+  ALTER TABLE bbs_users
+  ADD COLUMN IF NOT EXISTS ai_credits INTEGER NOT NULL DEFAULT 100
+`
+
+  await sql()`
     CREATE TABLE IF NOT EXISTS bbs_sessions (
       token_hash TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -77,11 +136,10 @@ const ensureTables = async () => {
   `
 }
 
-const sendCodeEmail = async (email: string, code: string) => {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error('RESEND_API_KEY is missing.')
-  }
-
+const sendCodeEmail = async (
+  email: string,
+  code: string,
+) => {
   const result = await getResend().emails.send({
     from: 'Better Brand Services <info@betterbrandservices.com>',
     to: email,
@@ -89,12 +147,18 @@ const sendCodeEmail = async (email: string, code: string) => {
     html: `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto">
         <h2>BBS AI Builder</h2>
+
         <p>Use this four-digit code to sign in:</p>
+
         <div style="font-size:36px;font-weight:bold;letter-spacing:10px;margin:24px 0">
           ${code}
         </div>
+
         <p>This code expires in 10 minutes.</p>
-        <p>If you didn't request this code, you can safely ignore this email.</p>
+
+        <p>
+          If you didn't request this code, you can safely ignore this email.
+        </p>
       </div>
     `,
   })
@@ -107,16 +171,22 @@ const sendCodeEmail = async (email: string, code: string) => {
 const requestCode = async (email: string) => {
   await ensureTables()
 
-  const [recentCode] = await sql()`
+  const recentCodes = await sql()`
     SELECT last_sent_at
     FROM bbs_auth_codes
     WHERE email = ${email}
       AND last_sent_at > NOW() - INTERVAL '45 seconds'
   `
 
-  if (recentCode) {
+  if (
+    Array.isArray(recentCodes) &&
+    recentCodes.length > 0
+  ) {
     return json(
-      { error: 'Wait 45 seconds before requesting another code.' },
+      {
+        error:
+          'Wait 45 seconds before requesting another code.',
+      },
       429,
     )
   }
@@ -125,7 +195,13 @@ const requestCode = async (email: string) => {
 
   await sql()`
     INSERT INTO bbs_auth_codes
-      (email, code_hash, expires_at, attempts, last_sent_at)
+      (
+        email,
+        code_hash,
+        expires_at,
+        attempts,
+        last_sent_at
+      )
     VALUES
       (
         ${email},
@@ -148,25 +224,39 @@ const requestCode = async (email: string) => {
       DELETE FROM bbs_auth_codes
       WHERE email = ${email}
     `
+
     throw error
   }
 
   return json({
-    message: 'A four-digit code was sent to your email.',
+    message:
+      'A four-digit code was sent to your email.',
   })
 }
 
-const verifyCode = async (email: string, code: string) => {
+const verifyCode = async (
+  email: string,
+  code: string,
+) => {
   if (!/^\d{4}$/.test(code)) {
     return json(
-      { error: 'Enter the four-digit code from your email.' },
+      {
+        error:
+          'Enter the four-digit code from your email.',
+      },
       422,
     )
   }
 
   await ensureTables()
 
-  const [verifiedCode] = await sql()`
+  /*
+   * Neon returns a query result that TypeScript does not
+   * always allow to be destructured directly.
+   *
+   * We explicitly treat the result as an array of rows.
+   */
+  const verifiedResult = await sql()`
     DELETE FROM bbs_auth_codes
     WHERE email = ${email}
       AND code_hash = ${hash(`${email}:${code}`)}
@@ -175,8 +265,16 @@ const verifyCode = async (email: string, code: string) => {
     RETURNING email
   `
 
+  const verifiedRows = Array.isArray(verifiedResult)
+    ? verifiedResult
+    : []
+
+  const verifiedCode = verifiedRows[0] as
+    | { email: string }
+    | undefined
+
   if (!verifiedCode) {
-    const [failedCode] = await sql()`
+    const failedResult = await sql()`
       UPDATE bbs_auth_codes
       SET attempts = attempts + 1
       WHERE email = ${email}
@@ -185,45 +283,86 @@ const verifyCode = async (email: string, code: string) => {
       RETURNING attempts
     `
 
+    const failedRows = Array.isArray(failedResult)
+      ? failedResult
+      : []
+
+    const failedCode = failedRows[0] as
+      | { attempts: number }
+      | undefined
+
     if (!failedCode) {
       return json(
-        { error: 'This code expired. Request a new four-digit code.' },
+        {
+          error:
+            'This code expired. Request a new four-digit code.',
+        },
         401,
       )
     }
 
     return json(
-      { error: 'That four-digit code is incorrect.' },
+      {
+        error:
+          'That four-digit code is incorrect.',
+      },
       401,
     )
   }
 
-  const [existingUser] = await sql()`
-    SELECT id, email
-    FROM bbs_users
-    WHERE email = ${email}
-  ` as unknown[] as (BbsUser | undefined)[]
+ const existingUserResult = await sql()`
+  SELECT id, email, ai_credits
+  FROM bbs_users
+  WHERE email = ${email}
+`
+
+  const existingUserRows = Array.isArray(
+    existingUserResult,
+  )
+    ? existingUserResult
+    : []
+
+  const existingUser = existingUserRows[0] as
+    | BbsUser
+    | undefined
 
   const user: BbsUser = existingUser ?? {
     id: randomBytes(16).toString('hex'),
     email,
+    ai_credits: 100,
   }
 
   if (!existingUser) {
     await sql()`
-      INSERT INTO bbs_users (id, email)
-      VALUES (${user.id}, ${user.email})
+      INSERT INTO bbs_users (
+        id,
+        email,
+        ai_credits
+      )
+      VALUES (
+        ${user.id},
+        ${user.email},
+        ${user.ai_credits}
+      )
     `
   }
 
-  const sessionToken = randomBytes(32).toString('base64url')
+  const sessionToken =
+    randomBytes(32).toString('base64url')
+
   const tokenHash = hash(sessionToken)
 
   await sql()`
-    INSERT INTO bbs_sessions
-      (token_hash, user_id, expires_at)
-    VALUES
-      (${tokenHash}, ${user.id}, NOW() + INTERVAL '30 days')
+    INSERT INTO bbs_sessions (
+      token_hash,
+      user_id,
+      expires_at
+    )
+    VALUES (
+      ${tokenHash},
+      ${user.id},
+      NOW() + INTERVAL '30 days'
+    )
   `
 
   return new Response(
@@ -245,22 +384,79 @@ const verifyCode = async (email: string, code: string) => {
   )
 }
 
-export const Route = createFileRoute('/api/builder-auth')({
+const logoutSession = async (request: Request) => {
+  const cookie = request.headers.get('cookie') || ''
+  const match = cookie.match(/(?:^|;\s*)bbs_session=([^;]+)/)
+
+  if (match) {
+    const sessionToken = decodeURIComponent(match[1])
+
+    if (sessionToken) {
+      await ensureTables()
+
+      await sql()`
+        DELETE FROM bbs_sessions
+        WHERE token_hash = ${hash(sessionToken)}
+      `
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ message: 'Signed out successfully.' }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Set-Cookie':
+          'bbs_session=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0',
+      },
+    },
+  )
+}
+
+export const Route = createFileRoute(
+  '/api/builder-auth',
+)({
   server: {
     handlers: {
+      GET: async ({ request }) => {
+  try {
+    const user = await getAuthenticatedUser(request)
+
+    if (!user) {
+      return json({ error: 'Not signed in.' }, 401)
+    }
+
+    return json({ user })
+  } catch (error) {
+    console.error('BBS SESSION ERROR:', error)
+
+    return json(
+      { error: 'Could not restore your session.' },
+      500,
+    )
+  }
+},
       POST: async ({ request }) => {
         try {
-          const body = await request.json() as {
-            action?: AuthAction
-            email?: string
-            code?: string
-          }
+         const body = (await request.json()) as {
+  action?: AuthAction
+  email?: string
+  code?: string
+}
 
-          const email = normalizeEmail(body.email)
+if (body.action === 'logout') {
+  return await logoutSession(request)
+}
+
+const email = normalizeEmail(body.email)
 
           if (!validEmail(email)) {
             return json(
-              { error: 'Enter a valid email address.' },
+              {
+                error:
+                  'Enter a valid email address.',
+              },
               422,
             )
           }
@@ -276,12 +472,22 @@ export const Route = createFileRoute('/api/builder-auth')({
             )
           }
 
+          if (body.action === 'logout') {
+            return await logoutSession(request)
+          }
+
           return json(
-            { error: 'Unknown authentication action.' },
+            {
+              error:
+                'Unknown authentication action.',
+            },
             400,
           )
         } catch (error) {
-          console.error('BBS AUTH ERROR:', error)
+          console.error(
+            'BBS AUTH ERROR:',
+            error,
+          )
 
           return json(
             {

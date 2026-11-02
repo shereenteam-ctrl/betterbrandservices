@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BuilderRouteImport } from './routes/builder'
+import { Route as ComingSoonRouteImport } from './routes/coming-soon'
 import { Route as ApiBuilderAuthRouteImport } from './routes/api/builder-auth'
+import { Route as ApiBuilderBillingRouteImport } from './routes/api/builder-billing'
 import { Route as ApiBuilderWorkspaceRouteImport } from './routes/api/builder-workspace'
 import { Route as ApiContactRouteImport } from './routes/api/contact'
 
@@ -25,9 +27,19 @@ const BuilderRoute = BuilderRouteImport.update({
   path: '/builder',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComingSoonRoute = ComingSoonRouteImport.update({
+  id: '/coming-soon',
+  path: '/coming-soon',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBuilderAuthRoute = ApiBuilderAuthRouteImport.update({
   id: '/api/builder-auth',
   path: '/api/builder-auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBuilderBillingRoute = ApiBuilderBillingRouteImport.update({
+  id: '/api/builder-billing',
+  path: '/api/builder-billing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBuilderWorkspaceRoute = ApiBuilderWorkspaceRouteImport.update({
@@ -44,14 +56,18 @@ const ApiContactRoute = ApiContactRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/coming-soon': typeof ComingSoonRoute
   '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-billing': typeof ApiBuilderBillingRoute
   '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
   '/api/contact': typeof ApiContactRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/coming-soon': typeof ComingSoonRoute
   '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-billing': typeof ApiBuilderBillingRoute
   '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
   '/api/contact': typeof ApiContactRoute
 }
@@ -59,7 +75,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/builder': typeof BuilderRoute
+  '/coming-soon': typeof ComingSoonRoute
   '/api/builder-auth': typeof ApiBuilderAuthRoute
+  '/api/builder-billing': typeof ApiBuilderBillingRoute
   '/api/builder-workspace': typeof ApiBuilderWorkspaceRoute
   '/api/contact': typeof ApiContactRoute
 }
@@ -68,21 +86,27 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/builder'
+    | '/coming-soon'
     | '/api/builder-auth'
+    | '/api/builder-billing'
     | '/api/builder-workspace'
     | '/api/contact'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/builder'
+    | '/coming-soon'
     | '/api/builder-auth'
+    | '/api/builder-billing'
     | '/api/builder-workspace'
     | '/api/contact'
   id:
     | '__root__'
     | '/'
     | '/builder'
+    | '/coming-soon'
     | '/api/builder-auth'
+    | '/api/builder-billing'
     | '/api/builder-workspace'
     | '/api/contact'
   fileRoutesById: FileRoutesById
@@ -90,7 +114,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BuilderRoute: typeof BuilderRoute
+  ComingSoonRoute: typeof ComingSoonRoute
   ApiBuilderAuthRoute: typeof ApiBuilderAuthRoute
+  ApiBuilderBillingRoute: typeof ApiBuilderBillingRoute
   ApiBuilderWorkspaceRoute: typeof ApiBuilderWorkspaceRoute
   ApiContactRoute: typeof ApiContactRoute
 }
@@ -111,11 +137,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BuilderRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/coming-soon': {
+      id: '/coming-soon'
+      path: '/coming-soon'
+      fullPath: '/coming-soon'
+      preLoaderRoute: typeof ComingSoonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/builder-auth': {
       id: '/api/builder-auth'
       path: '/api/builder-auth'
       fullPath: '/api/builder-auth'
       preLoaderRoute: typeof ApiBuilderAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/builder-billing': {
+      id: '/api/builder-billing'
+      path: '/api/builder-billing'
+      fullPath: '/api/builder-billing'
+      preLoaderRoute: typeof ApiBuilderBillingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/builder-workspace': {
@@ -138,7 +178,9 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BuilderRoute: BuilderRoute,
+  ComingSoonRoute: ComingSoonRoute,
   ApiBuilderAuthRoute: ApiBuilderAuthRoute,
+  ApiBuilderBillingRoute: ApiBuilderBillingRoute,
   ApiBuilderWorkspaceRoute: ApiBuilderWorkspaceRoute,
   ApiContactRoute: ApiContactRoute,
 }

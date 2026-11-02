@@ -20,7 +20,7 @@
     "highlight.js": "11.11.1",
     "lucide-react": "0.576.0",
     "nitro": "^3.0.260610-beta",
-    "openai": "^7.4.0",
+    "openai": "^7.27.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "resend": "^6.19.0",

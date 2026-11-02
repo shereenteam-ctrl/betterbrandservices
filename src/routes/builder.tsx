@@ -25,6 +25,8 @@ import {
   LogOut,
   Menu,
   Monitor,
+  Smartphone,
+  Tablet,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -38,12 +40,11 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react'
-import {
-  getUser,
-  handleAuthCallback,
-  logout,
-  type User,
-} from '@netlify/identity'
+type User = {
+  id: string
+  email: string
+  ai_credits: number
+}
 import { useEffect, useState, type FormEvent } from 'react'
 
 import '../builder.css'
@@ -62,7 +63,7 @@ export const Route = createFileRoute('/builder')({
 })
 
 type AuthState = 'checking' | 'email' | 'code' | 'authenticated'
-type PlatformTab = 'projects' | 'builder' | 'domains' | 'deployments' | 'settings'
+type PlatformTab = 'projects' | 'builder' | 'domains' | 'deployments' | 'billing' | 'settings'
 type BuilderStage = 'landing' | 'create' | 'workspace'
 type ProviderId = 'bbs-ai'
 
@@ -120,6 +121,7 @@ const navItems: Array<{ id: PlatformTab; label: string; icon: LucideIcon }> = [
   { id: 'builder', label: 'AI Builder', icon: WandSparkles },
   { id: 'domains', label: 'Domains', icon: Globe2 },
   { id: 'deployments', label: 'Deployments', icon: Rocket },
+  { id: 'billing', label: 'Billing & Subscription', icon: CreditCard },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
 
@@ -132,25 +134,31 @@ function BuilderPage() {
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const callback = await handleAuthCallback()
-        if (callback?.user) {
-          setUser(callback.user)
-          setAuthState('authenticated')
-          return
-        }
-      } catch {
-        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  const restoreSession = async () => {
+    try {
+      const response = await fetch('/api/builder-auth', {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        setUser(null)
+        setAuthState('email')
+        return
       }
 
-      const currentUser = await getUser()
-      setUser(currentUser)
-      setAuthState(currentUser ? 'authenticated' : 'email')
-    }
+      const result = await response.json() as { user: User }
 
-    void restoreSession()
-  }, [])
+      setUser(result.user)
+      setAuthState('authenticated')
+    } catch {
+      setUser(null)
+      setAuthState('email')
+    }
+  }
+
+  void restoreSession()
+}, [])
 
   if (authState === 'checking') return <BuilderLoading />
   if (!user || authState !== 'authenticated') {
@@ -339,7 +347,7 @@ function Platform({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const activeProject = workspace.projects.find((project) => project.id === activeProjectId) ?? null
-  const credits = typeof user.userMetadata?.ai_credits === 'number' ? user.userMetadata.ai_credits : 0
+  const credits = user.ai_credits
 
   const loadWorkspace = async () => {
     setLoading(true)
@@ -381,9 +389,25 @@ function Platform({ user, onLogout }: { user: User; onLogout: () => void }) {
   }
 
   const handleLogout = async () => {
-    await logout()
+  try {
+    const response = await fetch('/api/builder-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({ action: 'logout' }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Could not log out.')
+    }
+
     onLogout()
+  } catch (error) {
+    console.error('BBS logout error:', error)
   }
+}
 
   return (
     <main className="platform-shell">
@@ -408,7 +432,7 @@ function Platform({ user, onLogout }: { user: User; onLogout: () => void }) {
           <div className="platform-heading"><span>Workspace</span><strong>{navItems.find((item) => item.id === activeTab)?.label}</strong></div>
           <div className="platform-header-actions">
             <div className="credit-balance"><Zap size={15} fill="currentColor" /><span><strong>{credits.toLocaleString()}</strong> Credits</span></div>
-            <button className="user-menu" title={user.email}><span>{(user.email?.[0] ?? 'B').toUpperCase()}</span><span className="user-menu-copy"><strong>{user.name || 'BBS Creator'}</strong><small>{user.email}</small></span></button>
+            <button className="user-menu" title={user.email}><span>{(user.email?.[0] ?? 'B').toUpperCase()}</span><span className="user-menu-copy"><strong>{user.email || 'BBS Creator'}</strong><small>{user.email}</small></span></button>
             <button className="icon-button" onClick={() => void handleLogout()} title="Log out"><LogOut size={18} /></button>
           </div>
         </header>
@@ -433,8 +457,9 @@ function Platform({ user, onLogout }: { user: User; onLogout: () => void }) {
             />
           )}
           {activeTab === 'domains' && <DomainsView domains={workspace.domains} projects={workspace.projects} onDomainAdded={(domain) => setWorkspace((current) => ({ ...current, domains: [domain, ...current.domains] }))} />}
-          {activeTab === 'deployments' && <DeploymentsView deployments={workspace.deployments} />}
-          {activeTab === 'settings' && <SettingsView user={user} />}
+{activeTab === 'deployments' && <DeploymentsView deployments={workspace.deployments} />}
+{activeTab === 'billing' && <BillingView user={user} />}
+{activeTab === 'settings' && <SettingsView user={user} />}
         </div>
       </section>
     </main>
@@ -639,6 +664,7 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview')
   const [copied, setCopied] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
   const generatedCode = messages.filter((message) => message.role === 'assistant' && message.status === 'complete').at(-1)?.content ?? ''
 
   const copyCode = async () => {
@@ -682,7 +708,55 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
 
   return (
     <section className="workspace-page">
-      <div className="workspace-toolbar"><div><span className="workspace-breadcrumb">AI Builder <ChevronRight size={13} /> {project.name}</span><strong>{project.name}</strong></div><div className="workspace-status"><i /> Code generated</div><button className="preview-device active"><Monitor size={17} /></button><button className="toolbar-deploy" disabled title="Connect a deployment backend first"><Rocket size={16} /> Deploy</button></div>
+     <div className="workspace-toolbar">
+  <div>
+    <span className="workspace-breadcrumb">
+      AI Builder <ChevronRight size={13} /> {project.name}
+    </span>
+    <strong>{project.name}</strong>
+  </div>
+
+  <div className="workspace-status">
+    <i /> Code generated
+  </div>
+
+  <div className="preview-device-controls">
+    <button
+      className={`preview-device ${previewDevice === 'desktop' ? 'active' : ''}`}
+      onClick={() => setPreviewDevice('desktop')}
+      title="Desktop preview"
+      aria-label="Desktop preview"
+    >
+      <Monitor size={17} />
+    </button>
+
+    <button
+      className={`preview-device ${previewDevice === 'tablet' ? 'active' : ''}`}
+      onClick={() => setPreviewDevice('tablet')}
+      title="Tablet preview"
+      aria-label="Tablet preview"
+    >
+      <Tablet size={17} />
+    </button>
+
+    <button
+      className={`preview-device ${previewDevice === 'mobile' ? 'active' : ''}`}
+      onClick={() => setPreviewDevice('mobile')}
+      title="Mobile preview"
+      aria-label="Mobile preview"
+    >
+      <Smartphone size={17} />
+    </button>
+  </div>
+
+  <button
+    className="toolbar-deploy"
+    disabled
+    title="Connect a deployment backend first"
+  >
+    <Rocket size={16} /> Deploy
+  </button>
+</div>
       <div className="workspace-grid">
         <aside className="ai-chat-panel">
           <div className="panel-heading"><span className="ai-avatar"><Sparkles size={17} /></span><div><strong>{providerName(project.provider)}</strong><small>Instruction workspace</small></div><button><MoreHorizontal size={18} /></button></div>
@@ -695,7 +769,7 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
         </aside>
 
         <section className="live-preview-panel">
-          <div className="preview-browser"><div className="browser-bar"><span className="browser-dots"><i /><i /><i /></span><div className="preview-mode-tabs"><button className={viewMode === 'preview' ? 'active' : ''} onClick={() => setViewMode('preview')}><Monitor size={13} /> Preview</button><button className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}><Code2 size={13} /> Code</button></div><div className="code-actions"><button onClick={() => void copyCode()} disabled={!generatedCode}><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadCode} disabled={!generatedCode}><Download size={14} /> Download</button><button onClick={() => setPreviewKey((key) => key + 1)} disabled={viewMode !== 'preview'} aria-label="Refresh preview"><RefreshCw size={14} /></button></div></div>{generatedCode ? viewMode === 'preview' ? <iframe key={previewKey} className="generated-preview" title={`${project.name} preview`} srcDoc={generatedCode} sandbox="allow-forms allow-modals" /> : <div className="generated-code"><div><FileCode2 size={15} /> index.html <span>{generatedCode.length.toLocaleString()} characters</span></div><pre><code>{generatedCode}</code></pre></div> : <div className="awaiting-preview"><LoaderCircle className="spin" size={25} /><small>GENERATING</small><h2>Creating your website</h2><p>The completed preview and source code appear here.</p></div>}</div>
+         <div className={`preview-browser preview-browser-${previewDevice}`}><div className="browser-bar"><span className="browser-dots"><i /><i /><i /></span><div className="preview-mode-tabs"><button className={viewMode === 'preview' ? 'active' : ''} onClick={() => setViewMode('preview')}><Monitor size={13} /> Preview</button><button className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}><Code2 size={13} /> Code</button></div><div className="code-actions"><button onClick={() => void copyCode()} disabled={!generatedCode}><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadCode} disabled={!generatedCode}><Download size={14} /> Download</button><button onClick={() => setPreviewKey((key) => key + 1)} disabled={viewMode !== 'preview'} aria-label="Refresh preview"><RefreshCw size={14} /></button></div></div>{generatedCode ? viewMode === 'preview' ? <iframe key={previewKey} className="generated-preview" title={`${project.name} preview`} srcDoc={generatedCode} sandbox="allow-forms allow-modals" /> : <div className="generated-code"><div><FileCode2 size={15} /> index.html <span>{generatedCode.length.toLocaleString()} characters</span></div><pre><code>{generatedCode}</code></pre></div> : <div className="awaiting-preview"><LoaderCircle className="spin" size={25} /><small>GENERATING</small><h2>Creating your website</h2><p>The completed preview and source code appear here.</p></div>}</div>
         </section>
 
         <aside className="project-inspector">
@@ -750,6 +824,128 @@ function DeploymentsView({ deployments }: { deployments: Deployment[] }) {
   )
 }
 
+
+function BillingView({ user }: { user: User }) {
+  const plans = [
+    {
+      name: 'Starter',
+      price: '$19',
+      credits: '2,000',
+      description: 'For getting started with website building.',
+    },
+    {
+      name: 'Pro',
+      price: '$39',
+      credits: '5,000',
+      description: 'For growing businesses and creators.',
+    },
+    {
+      name: 'Business',
+      price: '$79',
+      credits: '10,000',
+      description: 'For businesses managing multiple projects.',
+    },
+  ]
+
+  return (
+    <section>
+      <PageIntro
+        eyebrow="Plans and payments"
+        title="Billing & Subscription"
+        description="Manage your BBS AI credits and choose a subscription plan."
+      />
+
+      <div className="settings-grid">
+        <article className="settings-card">
+          <div className="settings-card-heading">
+            <span><CircleDollarSign /></span>
+            <div>
+              <h2>Your Credit Balance</h2>
+              <p>Your available BBS AI credits.</p>
+            </div>
+          </div>
+
+          <div className="credit-settings">
+            <strong>{user.ai_credits.toLocaleString()}</strong>
+            <span>AI credits available</span>
+          </div>
+
+          <div className="settings-success">
+            <CheckCircle2 size={16} />
+            Your BBS AI account is active
+          </div>
+        </article>
+
+        <article className="settings-card">
+          <div className="settings-card-heading">
+            <span><CreditCard /></span>
+            <div>
+              <h2>Payment Setup</h2>
+              <p>Payment options for subscriptions.</p>
+            </div>
+          </div>
+
+          <div className="billing-row">
+            <CreditCard size={18} />
+            <span>
+              <strong>Card payments</strong>
+              <small>Stripe setup pending</small>
+            </span>
+            <StatusBadge status="not_connected" />
+          </div>
+
+          <div className="billing-row">
+            <CircleDollarSign size={18} />
+            <span>
+              <strong>PayPal</strong>
+              <small>PayPal setup pending</small>
+            </span>
+            <StatusBadge status="not_connected" />
+          </div>
+        </article>
+      </div>
+
+      <PageIntro
+        eyebrow="Subscription options"
+        title="Choose Your Plan"
+        description="Select a plan that matches your website-building needs."
+      />
+
+      <div className="settings-grid">
+        {plans.map((plan) => (
+          <article className="settings-card" key={plan.name}>
+            <div className="settings-card-heading">
+              <span><CreditCard /></span>
+              <div>
+                <h2>{plan.name}</h2>
+                <p>{plan.description}</p>
+              </div>
+            </div>
+
+            <div className="credit-settings">
+              <strong>{plan.price}</strong>
+              <span>per month</span>
+            </div>
+
+            <div className="billing-row">
+              <CircleDollarSign size={18} />
+              <span>
+                <strong>{plan.credits} credits</strong>
+                <small>Monthly credit allowance</small>
+              </span>
+            </div>
+
+            <button type="button" disabled>
+              Checkout coming soon
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+
 function SettingsView({ user }: { user: User }) {
   return (
     <section>
@@ -758,7 +954,7 @@ function SettingsView({ user }: { user: User }) {
         <article className="settings-card"><div className="settings-card-heading"><span><ShieldCheck /></span><div><h2>Account</h2><p>Authenticated through Netlify Identity email verification.</p></div></div><label>Email address<input value={user.email ?? ''} readOnly /></label><label>Authentication method<input value="4-digit email verification code" readOnly /></label><div className="settings-success"><CheckCircle2 size={16} /> Passwordless access active</div></article>
         <article className="settings-card"><div className="settings-card-heading"><span><Bot /></span><div><h2>BBS AI Engine</h2><p>BBS AI is the single autonomous engine that builds and revises every project.</p></div></div><div className="integration-list"><div><span className="integration-logo">B</span><span><strong>BBS AI</strong><small>Autonomous website generation active</small></span><StatusBadge status="connected" /></div></div></article>
         <article className="settings-card"><div className="settings-card-heading"><span><Rocket /></span><div><h2>Deployment Provider</h2><p>Required for builds, published URLs, and redeploys.</p></div></div><div className="large-connection-state"><Cloud size={27} /><strong>Not connected</strong><p>Connect supported deployment infrastructure before enabling publish actions.</p><button disabled>Configure deployment</button></div></article>
-        <article className="settings-card"><div className="settings-card-heading"><span><CircleDollarSign /></span><div><h2>Credits & Billing</h2><p>Credit balances come from verified billing metadata.</p></div></div><div className="credit-settings"><strong>{typeof user.userMetadata?.ai_credits === 'number' ? user.userMetadata.ai_credits.toLocaleString() : '0'}</strong><span>AI credits available</span></div><div className="billing-row"><CreditCard size={18} /><span><strong>Billing provider</strong><small>Stripe connection required for purchases</small></span><StatusBadge status="not_connected" /></div></article>
+        <article className="settings-card"><div className="settings-card-heading"><span><CircleDollarSign /></span><div><h2>Credits & Billing</h2><p>Credit balances come from verified billing metadata.</p></div></div><div className="credit-settings"><strong>{user.ai_credits.toLocaleString()}</strong><span>AI credits available</span></div><div className="billing-row"><CreditCard size={18} /><span><strong>Billing provider</strong><small>Stripe connection required for purchases</small></span><StatusBadge status="not_connected" /></div></article>
       </div>
     </section>
   )

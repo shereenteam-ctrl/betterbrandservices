@@ -448,7 +448,7 @@ function HomePage() {
           </nav>
 
           <div className="desktop-actions">
-            <a className="builder-nav-link" href="/coming-soon">
+            <a className="builder-nav-link" href="/builder">
               Build With AI <Sparkles size={14} />
             </a>
             <a className="button button-small desktop-cta" href="#contact">
@@ -475,7 +475,7 @@ function HomePage() {
                 {link.label}
               </a>
             ))}
-            <a className="button button-ghost" href="/coming-soon">
+            <a className="button button-ghost" href="/builder">
               Build With AI <Sparkles size={16} />
             </a>
             <a className="button" href="#contact" onClick={() => setMenuOpen(false)}>
@@ -505,7 +505,7 @@ function HomePage() {
             <a className="button" href="#contact">
               Get Started <ArrowRight size={18} />
             </a>
-            <a className="button button-ghost builder-hero-action" href="/coming-soon">
+            <a className="button button-ghost builder-hero-action" href="/builder">
               Build With AI <Sparkles size={18} />
             </a>
             <a className="button button-ghost" href="#services">
