@@ -48,6 +48,7 @@ type User = {
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import '../builder.css'
+import DOMPurify from 'dompurify'
 
 export const Route = createFileRoute('/builder')({
   head: () => ({
@@ -670,34 +671,35 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
   const generatedCode = messages.filter((message) => message.role === 'assistant' && message.status === 'complete').at(-1)?.content ?? ''
   
 
-const editorNonce = useRef(crypto.randomUUID()).current
-const editablePreviewCode = generatedCode
-  ? generatedCode
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
-      .replace(/<script\b[^>]*\/?>/gi, '')
-      .replace(
-        '</body>',
-        `<script>
-          document.addEventListener('click', function(event) {
-            const target = event.target;
-            if (!(target instanceof Element)) return;
+const [editablePreviewCode, setEditablePreviewCode] = useState('')
 
-            const section = target.closest('section, header, footer, main, nav');
-            if (!section) return;
+useEffect(() => {
+  if (!generatedCode) {
+    setEditablePreviewCode('')
+    return
+  }
 
-            event.preventDefault();
-            event.stopPropagation();
+  const sanitized = DOMPurify.sanitize(generatedCode, {
+    WHOLE_DOCUMENT: true,
+    FORBID_TAGS: [
+      'script',
+      'iframe',
+      'object',
+      'embed',
+      'form',
+      'base',
+    ],
+    FORBID_ATTR: [
+      'srcdoc',
+      'onerror',
+      'onload',
+      'onclick',
+      'onmouseover',
+    ],
+  })
 
-            const sectionId = section.id || section.tagName.toLowerCase();
-
-            parent.postMessage({
-              type: 'BBS_SECTION_SELECTED',
-              sectionId: sectionId
-            }, '*');
-          }, true);
-        </script></body>`
-      )
-  : ''
+  setEditablePreviewCode(sanitized)
+}, [generatedCode])
 
 
   useEffect(() => {
