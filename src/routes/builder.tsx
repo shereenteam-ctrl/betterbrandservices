@@ -733,27 +733,40 @@ const editablePreviewCode = generatedCode
     URL.revokeObjectURL(url)
   }
 
-  const sendInstruction = async (event: FormEvent) => {
-    event.preventDefault()
-    if (instruction.trim().length < 2) return
-    setStatus('saving')
-    setError('')
-    try {
-      const response = await fetch('/api/builder-workspace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add-message', projectId: project.id, content: instruction }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'The website could not be updated.')
-      onMessagesAdded([data.userMessage, data.generatedMessage])
-      setInstruction('')
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'The website could not be updated.')
-    } finally {
-      setStatus('idle')
-    }
+ 
+const sendInstruction = async (event: FormEvent) => {
+  event.preventDefault()
+  if (instruction.trim().length < 2) return
+
+  setStatus('saving')
+  setError('')
+
+  try {
+    const response = await fetch('/api/builder-workspace', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'add-message',
+        projectId: project.id,
+        content: selectedSection
+          ? `Modify the "${selectedSection}" section only. ${instruction.trim()}`
+          : instruction.trim(),
+      }),
+    })
+
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'The website could not be updated.')
+
+    onMessagesAdded([data.userMessage, data.generatedMessage])
+    setInstruction('')
+    setSelectedSection(null)
+  } catch (caught) {
+    setError(caught instanceof Error ? caught.message : 'The website could not be updated.')
+  } finally {
+    setStatus('idle')
   }
+}
+
 
   return (
     <section className="workspace-page">
