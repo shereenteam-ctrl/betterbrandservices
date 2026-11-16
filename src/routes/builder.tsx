@@ -45,7 +45,7 @@ type User = {
   email: string
   ai_credits: number
 }
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import '../builder.css'
 
@@ -664,8 +664,25 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview')
   const [copied, setCopied] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
+  const [selectedSection, setSelectedSection] = useState<string | null>(null)
+  const previewFrameRef = useRef<HTMLIFrameElement>(null)
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
   const generatedCode = messages.filter((message) => message.role === 'assistant' && message.status === 'complete').at(-1)?.content ?? ''
+  useEffect(() => {
+  const handlePreviewMessage = (event: MessageEvent) => {
+    if (event.source !== previewFrameRef.current?.contentWindow) return
+
+    if (event.data?.type === 'BBS_SECTION_SELECTED') {
+      setSelectedSection(event.data.sectionId)
+    }
+  }
+
+  window.addEventListener('message', handlePreviewMessage)
+
+  return () => {
+    window.removeEventListener('message', handlePreviewMessage)
+  }
+}, [])
 
   const copyCode = async () => {
     if (!generatedCode) return
@@ -769,7 +786,17 @@ function BuilderWorkspace({ project, messages, onMessagesAdded }: { project: Pro
         </aside>
 
         <section className="live-preview-panel">
-         <div className={`preview-browser preview-browser-${previewDevice}`}><div className="browser-bar"><span className="browser-dots"><i /><i /><i /></span><div className="preview-mode-tabs"><button className={viewMode === 'preview' ? 'active' : ''} onClick={() => setViewMode('preview')}><Monitor size={13} /> Preview</button><button className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}><Code2 size={13} /> Code</button></div><div className="code-actions"><button onClick={() => void copyCode()} disabled={!generatedCode}><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadCode} disabled={!generatedCode}><Download size={14} /> Download</button><button onClick={() => setPreviewKey((key) => key + 1)} disabled={viewMode !== 'preview'} aria-label="Refresh preview"><RefreshCw size={14} /></button></div></div>{generatedCode ? viewMode === 'preview' ? <iframe key={previewKey} className="generated-preview" title={`${project.name} preview`} srcDoc={generatedCode} sandbox="allow-forms allow-modals" /> : <div className="generated-code"><div><FileCode2 size={15} /> index.html <span>{generatedCode.length.toLocaleString()} characters</span></div><pre><code>{generatedCode}</code></pre></div> : <div className="awaiting-preview"><LoaderCircle className="spin" size={25} /><small>GENERATING</small><h2>Creating your website</h2><p>The completed preview and source code appear here.</p></div>}</div>
+         <div className={`preview-browser preview-browser-${previewDevice}`}><div className="browser-bar">{selectedSection && (
+  <div className="selected-section-indicator">
+    Editing section: {selectedSection}
+    <button onClick={() => setSelectedSection(null)}>
+      Clear selection
+    </button>
+  </div>
+)}<span className="browser-dots"><i /><i /><i /></span><div className="preview-mode-tabs"><button className={viewMode === 'preview' ? 'active' : ''} onClick={() => setViewMode('preview')}><Monitor size={13} /> Preview</button><button className={viewMode === 'code' ? 'active' : ''} onClick={() => setViewMode('code')}><Code2 size={13} /> Code</button></div><div className="code-actions"><button onClick={() => void copyCode()} disabled={!generatedCode}><Copy size={14} /> {copied ? 'Copied' : 'Copy'}</button><button onClick={downloadCode} disabled={!generatedCode}><Download size={14} /> Download</button><button onClick={() => setPreviewKey((key) => key + 1)} disabled={viewMode !== 'preview'} aria-label="Refresh preview"><RefreshCw size={14} /></button></div></div>{generatedCode ? viewMode === 'preview' ? <iframe
+  ref={previewFrameRef}
+  key={previewKey}
+  className="generated-preview" title={`${project.name} preview`} srcDoc={generatedCode} sandbox="allow-forms allow-modals" /> : <div className="generated-code"><div><FileCode2 size={15} /> index.html <span>{generatedCode.length.toLocaleString()} characters</span></div><pre><code>{generatedCode}</code></pre></div> : <div className="awaiting-preview"><LoaderCircle className="spin" size={25} /><small>GENERATING</small><h2>Creating your website</h2><p>The completed preview and source code appear here.</p></div>}</div>
         </section>
 
         <aside className="project-inspector">

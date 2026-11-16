@@ -232,3 +232,23 @@
     display: none;
   }
 }
+.selected-section-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(34, 211, 238, 0.1);
+  border-bottom: 1px solid rgba(34, 211, 238, 0.25);
+  color: #67e8f9;
+  font-size: 13px;
+}
+
+.selected-section-indicator button {
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
